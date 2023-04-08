@@ -56,6 +56,8 @@ Some games' achievement pages on Steam show empty progressbars with progress num
 ## Settings
 Settings can be changed in `settings/settings.txt`. You can also create `settings/settings_[Emulator].txt` or `settings/settings_[AppID].txt` to use different settings for an emulator (useful for `bar_force_unlock`, for example) or for a specific game (`bar_ignore_min` is a great example, or maybe you want to set some game-specific colors). The settings files use a format similar to `games.txt` and `alias.txt`. All available settings are included in the default `settings.txt`, but if you remove any, their default values will be used. Below is a list of all available settings. For boolean settings, you can use `1`/`0` as well as `true`/`false`.
 
+Allowed emulator names: `goldberg`, `codex`
+
 ### List of settings
 `delay` - time (in seconds) that must pass before files are checked for changes. Default: `0.5`
 
