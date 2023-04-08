@@ -1,0 +1,3 @@
+Use this to assign short names to games and load them without remembering or checking AppIDs.
+Format: AppID, then name, separated with an equals sign.
+000000=example
