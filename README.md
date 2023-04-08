@@ -26,6 +26,9 @@ By default it checks the Codex folder located in Documents, but for some version
 
 ## What is supported?
 
+### Operating systems
+This was made and tested on Windows 7, but it should also support Linux.
+
 ### Emulators
 As of now, only Goldberg and Codex are supported, but more may be added later.
 
@@ -182,3 +185,5 @@ List of random ideas that *might* get added/changed someday. A lot of these are 
 - Different color for full bars
 
 - Get rid of `int&-1` setting type
+
+- Show version somewhere inside the program?
