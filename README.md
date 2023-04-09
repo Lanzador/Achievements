@@ -5,7 +5,7 @@ A program that lets you view your achievements and stats from Steam emulators. M
 Made with Python 3.8.10. Only dependencies are pygame and plyer.
 
 ## Usage
-This works based on local files, so you need to generate the list of achievements before you can do anything. To do that, use [Goldberg's generate_emu_config.py](https://gitlab.com/Mr_Goldberg/goldberg_emulator/-/tree/master/scripts). The generated `achievements.json`, `achievement_images` and `stats.txt` should be put in `games/[AppID]`. You can also edit `games/games.txt` to see a proper game name instead of the AppID and `alias.txt` to load the achievements using a short name instead of remembering AppIDs.
+This works based on local files, so you need to generate the list of achievements before you can do anything. To do that, use [Goldberg's generate_emu_config.py](https://gitlab.com/Mr_Goldberg/goldberg_emulator/-/tree/master/scripts). The generated `achievements.json`, `achievement_images` and `stats.txt` should be put in `games/[AppID]`. You can also edit `games/games.txt` to see a proper game name instead of the AppID and `games/alias.txt` to load the achievements using a short name instead of remembering AppIDs.
 
 The two txts follow this format:
 ```
