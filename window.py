@@ -4,12 +4,38 @@ import platform
 import json
 import time
 import pygame
-from plyer import notification
 from showtext import *
 from achievements import *
 from stats import *
 from filechanges import *
 from settings import *
+
+if platform.uname().system == 'Windows':
+    from plyer import notification
+elif platform.uname().system == 'Linux':
+    import unotify as notification
+    os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '0'
+    # set urgency to display notification on top of fullscreen apps
+    sysnotespec = {
+        "urgency": notification.urgencies.HIGH
+    }
+else:
+    from plyer import notification
+
+def sendnote(title, message, timeout):
+    kwargs = {
+        "app_name": 'Achievements',
+        # is this don't support on windows 7?
+        #"app_icon": iconpath,
+        "title": title,
+        "message": message,
+        "timeout": timeout
+    }
+    try:
+        kwargs.update(sysnotespec)
+    except:
+        pass
+    return notification.notify(**kwargs)
 
 def round_down(number, leave_dec):
     number = str(number)
@@ -262,8 +288,6 @@ def draw_history():
 
     pygame.display.flip()
 
-if platform.uname().system == 'Linux':
-    os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '0'
 
 appid, achdata_source, cdx_appdata = (None, None, None)
 if len(sys.argv) > 1:
@@ -479,7 +503,7 @@ while running:
                     history.insert(0, {'type': 'unlock', 'ach': achs[ach_idxs[change['ach_api']]], 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
                     if stg['notif'] and not change['was_forced']:
                         if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                            notification.notify(title='Achievement Unlocked!', message=change['ach'], timeout=stg['notif_timeout'])
+                            sendnote(title='Achievement Unlocked!', message=change['ach'], timeout=stg['notif_timeout'])
                             notifications_sent += 1
                         else:
                             notifications_hidden += 1
@@ -492,7 +516,7 @@ while running:
                             history.insert(0, {'type': 'lock', 'ach': achs[ach_idxs[change['ach_api']]], 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
                             if stg['notif']:
                                 if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                                    notification.notify(title='Achievement Locked', message=change['ach'], timeout=stg['notif_timeout'])
+                                    sendnote(title='Achievement Locked', message=change['ach'], timeout=stg['notif_timeout'])
                                     notifications_sent += 1
                                 else:
                                     notifications_hidden += 1
@@ -500,7 +524,7 @@ while running:
                             history.insert(0, {'type': 'lock_all', 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
                             if stg['notif']:
                                 if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                                    notification.notify(title='All achievements locked', message='Achievement data not found', timeout=stg['notif_timeout'])
+                                    sendnote(title='All achievements locked', message='Achievement data not found', timeout=stg['notif_timeout'])
                                     notifications_sent += 1
                                 else:
                                     notifications_hidden += 1
@@ -509,12 +533,12 @@ while running:
                     history.insert(0, {'type': 'progress_report', 'value': change['value'], 'ach': achs[ach_idxs[change['ach_api']]], 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
                     if stg['notif']:
                         if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                            notification.notify(title='Achievement Progress', message=f"{change['ach']} ({change['value'][0]}/{change['value'][1]})", timeout=stg['notif_timeout'])
+                            sendnote(title='Achievement Progress', message=f"{change['ach']} ({change['value'][0]}/{change['value'][1]})", timeout=stg['notif_timeout'])
                             notifications_sent += 1
                         else:
                             notifications_hidden += 1
             if notifications_hidden > 0:
-                notification.notify(title='Too many notifications', message=f'{notifications_hidden} more notification(s) were hidden', timeout=stg['notif_timeout'])
+                sendnote(title='Too many notifications', message=f'{notifications_hidden} more notification(s) were hidden', timeout=stg['notif_timeout'])
             flip_required = True
 
         if stg['delay_stats'] <= 1 or stats_delay_counter >= stg['delay_stats']:
@@ -548,7 +572,7 @@ while running:
                                 history.insert(0, {'type': 'unlock', 'ach': ach, 'time_real': datetime.now().strftime('%d %b %Y %H:%M:%S (F)'), 'time_action': time_action, 'unread': unread_default})
                                 if stg['notif']:
                                     if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                                        notification.notify(title='Achievement Unlocked!', message=ach.display_name_l, timeout=stg['notif_timeout'])
+                                        sendnote(title='Achievement Unlocked!', message=ach.display_name_l, timeout=stg['notif_timeout'])
                                         notifications_sent += 1
                                     else:
                                         notifications_hidden += 1
@@ -563,12 +587,12 @@ while running:
                                     time_action = datetime.fromtimestamp(stats[ach.progress.value['operand1']].fchecker.last_check)
                                     time_action = time_action.strftime('%d %b %Y %H:%M:%S')
                                     if stg['forced_mark']:
-                                        tme_real += ' (F)'
+                                        time_real += ' (F)'
                                         time_action += ' (F)'
                                     history.insert(0, {'type': 'lock', 'ach': ach, 'time_real': datetime.now().strftime('%d %b %Y %H:%M:%S (F)'), 'time_action': time_action, 'unread': unread_default})
                                     if stg['notif']:
                                         if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                                            notification.notify(title='Achievement Unlocked!', message=ach.display_name_l, timeout=stg['notif_timeout'])
+                                            sendnote(title='Achievement Unlocked!', message=ach.display_name_l, timeout=stg['notif_timeout'])
                                             notifications_sent += 1
                                         else:
                                             notifications_hidden += 1
