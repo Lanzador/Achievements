@@ -158,7 +158,7 @@ def draw_achs():
             
             if achs_f[i].earned:
                 pygame.draw.rect(screen, stg['frame_color_unlock'], pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-                if achs_f[i].icon != None:
+                if achs_f[i].icon != None and achs_f[i].icon in ach_icons:
                     screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
                 else:
                     pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -193,7 +193,7 @@ def draw_achs():
 
             else:
                 pygame.draw.rect(screen, stg['frame_color_lock'], pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-                if achs_f[i].icon_gray != None:
+                if achs_f[i].icon_gray != None and achs_f[i].icon_gray in ach_icons:
                     screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
                 else:
                     pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -278,7 +278,7 @@ def draw_history():
         
         if history[i]['type'] == 'unlock':
             pygame.draw.rect(screen, stg['frame_color_unlock'], pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if history[i]['ach'].icon != None:
+            if history[i]['ach'].icon != None and history[i]['ach'].icon in ach_icons:
                 screen.blit(ach_icons[history[i]['ach'].icon], (10, header_h + (i - scroll_history) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -290,7 +290,7 @@ def draw_history():
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'lock':
             pygame.draw.rect(screen, stg['frame_color_lock'], pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if history[i]['ach'].icon_gray != None:
+            if history[i]['ach'].icon_gray != None and history[i]['ach'].icon_gray in ach_icons:
                 screen.blit(ach_icons[history[i]['ach'].icon_gray], (10, header_h + (i - scroll_history) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -311,7 +311,7 @@ def draw_history():
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'progress_report':
             pygame.draw.rect(screen, stg['frame_color_lock'], pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if history[i]['ach'].icon != None:
+            if history[i]['ach'].icon != None and history[i]['ach'].icon in ach_icons:
                 screen.blit(ach_icons[history[i]['ach'].icon_gray], (10, header_h + (i - scroll_history) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -578,6 +578,9 @@ for i in range(len(achs)):
     try:
         if achs[i].icon != None and not achs[i].icon in ach_icons.keys():
             ach_icons[achs[i].icon] = pygame.image.load(os.path.join('games', appid, 'achievement_images', achs[i].icon))
+    except pygame.error:
+        pass
+    try:
         if achs[i].icon_gray != None and not achs[i].icon_gray in ach_icons.keys():
             ach_icons[achs[i].icon_gray] = pygame.image.load(os.path.join('games', appid, 'achievement_images', achs[i].icon_gray))
     except pygame.error:
