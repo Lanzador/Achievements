@@ -22,7 +22,7 @@ Lines not containing `=` (or containing more than one `=`) are ignored.
 
 Once you set this up, you can open the list by running `window.py` (or `achievements.exe` if you downloaded the release version) and entering the AppID or alias of the game. You can also pass it (and the values below) as command line arguments.
 
-By default, it's assumed that you use Goldberg. Below are instructions for other emulators.
+By default, it's assumed that you use Goldberg. For other emulators, add their short name after the AppID.
 
 ### Codex
 `[AppID] c`
