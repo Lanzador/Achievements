@@ -805,7 +805,7 @@ while running:
             if stats_changed:
                 flip_required = True
                 for ach in achs:
-                    if ach.progress != None:
+                    if ach.progress != None and ach.progress.support:
                         ach.progress.calculate(stats)
 
                         if stg['bar_force_unlock']:

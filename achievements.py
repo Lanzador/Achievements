@@ -106,8 +106,8 @@ class AchievementProgress:
     def __init__(self, progressdata, stats=None):
         self.value = progressdata['value']
 
-        self.min_val = int(progressdata['min_val'])
-        self.max_val = int(progressdata['max_val'])
+        self.min_val = float(progressdata['min_val'])
+        self.max_val = float(progressdata['max_val'])
         if self.value['operand1'] in stats:
             self.min_val = stats[self.value['operand1']].to_stat_type((progressdata['min_val']))
             self.max_val = stats[self.value['operand1']].to_stat_type((progressdata['max_val']))
@@ -115,23 +115,25 @@ class AchievementProgress:
         has_unknown_stats = False
         if len(self.value) == 2 and self.value['operation'] == 'statvalue':
             has_unknown_stats = not self.value['operand1'] in stats
-            self.current_value = self.min_val
         self.support, self.support_error = self.check_support(stats, has_unknown_stats)
         
         if stats != None:
             self.calculate(stats)
         else:
             self.current_value = self.min_val
+            self.real_value = 0
 
     def calculate(self, stats):
         if self.support:
-            if len(self.value) == 2 and self.value['operation'] == 'statvalue' and self.value['operand1'] in stats:
-                self.current_value = stats[self.value['operand1']].value
-                if self.current_value > self.max_val:
-                    self.current_value = self.max_val
-                self.real_value = self.current_value
-                if self.current_value < self.min_val:
-                    self.current_value = self.min_val
+            self.current_value = stats[self.value['operand1']].value
+            if self.current_value > self.max_val:
+                self.current_value = self.max_val
+            self.real_value = self.current_value
+            if self.current_value < self.min_val:
+                self.current_value = self.min_val
+        else:
+            self.current_value = self.min_val
+            self.real_value = 0
 
     def get_without_min(self):
         return (self.current_value - self.min_val, self.max_val - self.min_val)
@@ -139,10 +141,10 @@ class AchievementProgress:
     def check_support(self, stats, has_unknown_stats):
         if not (len(self.value) == 2 and self.value['operation'] == 'statvalue'):
             return (False, 'Unsupported value formula')
-        elif not stats[self.value['operand1']].type in ('int', 'float'):
-            return (False, 'Unsupported stat type')
         elif has_unknown_stats:
             return (False, 'Unknown stat')
+        elif not stats[self.value['operand1']].type in ('int', 'float'):
+            return (False, 'Unsupported stat type')
         return (True, None)
 
 def filter_achs(achs, state, hide_secrets, unlocks_on_top):
