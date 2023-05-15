@@ -1,3 +1,6 @@
+## v1.1.1
+- If bar length is set to 0, remove the empty space between the bar and the x/y text. (This was supposed to be in v1.1.0, but I forgot to finish it. And I also forgot to name the commit just now.)
+
 ## v1.1.0
 - Can now use an alias only for its AppID. If an emulator name is specified after the alias, it's used instead of the one from `alias.txt`.
 - Unlock timestamps can now be saved to display the correct time even if the emulator overwrites it. Related options were added.
