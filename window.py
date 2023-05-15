@@ -402,6 +402,17 @@ else:
 
 stg = load_settings(appid, achdata_source)
 
+if stg['window_size_x'] < 274 or stg['window_size_y'] < 132:
+    print('Window size must be at least 274x132')
+    sys.exit()
+elif stg['gamebar_position'] == 'under' and stg['window_size_y'] < 144:
+    print('With gamebar_position=under, window size must be at least 274x144')
+    sys.exit()
+if stg['bar_length'] == 0:
+    stg['bar_length'] = -10
+if stg['gamebar_length'] == 0:
+    stg['gamebar_length'] = -10
+
 if 'LnzAch_gamename' in os.environ:
     gamename = os.environ['LnzAch_gamename']
     with open('games/games.txt', 'r+', encoding='utf-8') as gamestxt:
@@ -432,13 +443,6 @@ else:
             gamename = steam_req[appid]['data']['name']
             with open('games/games.txt', 'a', encoding='utf-8') as gamestxt:
                 gamestxt.write(f'{appid}={gamename}\n')
-
-if stg['window_size_x'] < 274 or stg['window_size_y'] < 132:
-    print('Window size must be at least 274x132')
-    sys.exit()
-elif stg['gamebar_position'] == 'under' and stg['window_size_y'] < 144:
-    print('With gamebar_position=under, window size must be at least 274x144')
-    sys.exit()
 
 if achdata_source == 'steam':
     if len(stg['api_key']) == 0:
