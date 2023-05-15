@@ -25,7 +25,7 @@ Once you set this up, you can open the list by running `window.py` (or `achievem
 By default, it's assumed that you use Goldberg. For other emulators, add their short name after the AppID.
 
 ### Codex
-`[AppID] c`
+`[AppID] c [a]`
 
 By default it checks the Codex folder located in Documents, but for some versions of Codex you'll want to look for achievement files in AppData instead. If that's the case, just add an `a`: `[AppID] c a`
 
