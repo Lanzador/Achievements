@@ -85,6 +85,8 @@ def get_save_dir(appid, source, extra):
         else:
             path_crc = zlib.crc32(bytes(extra[5:], 'utf-8'))
             d += f'/path_{appid}_{path_crc}'
+    elif source == 'steam':
+        d += f'/{extra}'
     return d
 
 class FileChecker:
