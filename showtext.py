@@ -1,17 +1,16 @@
-def show_text(screen, font, str, place, color=(255, 255, 255)):
-    rtext = font.render(str, True, color)
+def show_text(screen, font, s, place, color=(255, 255, 255)):
+    rtext = font.render(s, True, color)
     screen.blit(rtext, place)
 
-def long_text(screen, max_width, font, str, place, color=(255, 255, 255), only_return=False, ignore_chars=0):
-
-    if font.size(str)[0] <= max_width:
+def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_return=False, ignore_chars=0):
+    if font.size(s)[0] <= max_width:
         if not only_return:
-            show_text(screen, font, str, place, color)
-        return str
+            show_text(screen, font, s, place, color)
+        return s
 
     if ignore_chars == 0:
         check_str = ''
-        words = str.split()
+        words = s.split()
         for word in words:
             prevlen = len(check_str)
             if prevlen > 0:
@@ -19,22 +18,29 @@ def long_text(screen, max_width, font, str, place, color=(255, 255, 255), only_r
             check_str += word
             if font.size(check_str)[0] > max_width:
                 ignore_chars = prevlen
+                break
 
-    for i in range(ignore_chars + 1, len(str)):
-        if font.size(str[:i])[0] > max_width:
+    for i in range(ignore_chars + 1, len(s)):
+        if font.size(s[:i])[0] > max_width:
             for j in range(i, 0, -1):
-                if font.size(str[:j] + '...')[0] <= max_width:
+                if font.size(s[:j] + '...')[0] <= max_width:
                     if not only_return:
-                        show_text(screen, font, str[:j] + '...', place, color)
-                    return str[:j] + '...'
+                        show_text(screen, font, s[:j] + '...', place, color)
+                    return s[:j] + '...'
+            if font.size('...')[0] <= max_width:
+                s = '...'
+            elif font.size(s[0])[0] <= max_width:
+                s = s[0]
+            else:
+                s = ''
 
     if not only_return:
-        show_text(screen, font, str, place, color)
-    return str
+        show_text(screen, font, s, place, color)
+    return s
 
-def multiline_text(screen, max_lines, height_change, max_width, font, str, place, color=(255, 255, 255), only_return = False):
+def multiline_text(screen, max_lines, height_change, max_width, font, s, place, color=(255, 255, 255), only_return = False):
     lines = ['']
-    words = str.split()
+    words = s.split()
     too_long = False
 
     for word in words:

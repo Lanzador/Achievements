@@ -7,10 +7,8 @@ def get_game_name(appid):
         namelist = namelist.split('\n')
         for namepair in namelist:
             namepair = namepair.split('=')
-            if len(namepair) != 2:
-                continue
             if namepair[0] == str(appid):
-                return namepair[1]
+                return '='.join(namepair[1:])
         return appid
     except FileNotFoundError:
         return appid
@@ -33,46 +31,56 @@ def check_alias(alias, default=None):
     except FileNotFoundError:
         return default
 
-def source_name(source, default):
-    known_values = {('g', 'gb', 'goldberg'): 'goldberg', ('c', 'cd', 'cod', 'cdx'): 'codex'}
+def source_name(source):
+    known_values = {('g', 'gb', 'goldberg'): 'goldberg',
+                    ('c', 'cd', 'cod', 'cdx', 'codex'): 'codex',
+                    ('a', 'ali', 'ali213', '213', 'a213'): 'ali213',
+                    ('s', 'sse', 'smartsteamemu', 'smart'): 'sse',
+                    ('st', 'steam'): 'steam'}
     for s in known_values.keys():
         if source in s:
             return known_values[s]
-    return default
+    return None
 
-known_settings = {'delay': {'type': 'float', 'default': 0.5},
+known_settings = {'window_size_x': {'type': 'int', 'default': 800},
+                  'window_size_y': {'type': 'int', 'default': 600},
+                  'delay': {'type': 'float', 'default': 0.5},
                   'delay_stats': {'type': 'int', 'default': 1},
                   'delay_sleep': {'type': 'float', 'default': 0.1},
                   'delay_read_change': {'type': 'float', 'default': 0.05},
                   'gamebar_length': {'type': 'int', 'default': 375},
+                  'gamebar_position': {'type': 'choice', 'allowed': ['normal', 'repname', 'under', 'hide'], 'default': 'normal'},
                   'frame_size': {'type': 'int', 'default': 2},
                   'frame_color_unlock': {'type': 'color', 'default': (255, 255, 255)},
                   'frame_color_lock': {'type': 'color', 'default': (128, 128, 128)},
                   'hidden_desc': {'type': 'str', 'default': '[Hidden achievement]'},
                   'hide_secrets': {'type': 'bool', 'default': False},
+                  'unlocks_on_top': {'type': 'bool', 'default': False},
                   'bar_length': {'type': 'int', 'default': 300},
                   'bar_unlocked': {'type': 'choice', 'allowed': ['show', 'full', 'hide'], 'default': 'full'},
                   'bar_hide_unsupported': {'type': 'choice', 'allowed': ['none', 'stat', 'all'], 'default': 'none'},
                   'bar_hide_secret': {'type': 'bool', 'default': True},
                   'bar_ignore_min': {'type': 'bool', 'default': False},
                   'bar_force_unlock': {'type': 'bool', 'default': False},
-                  'forced_keep': {'type': 'choice', 'allowed': {'no', 'session', 'save'}, 'default': 'save'},
+                  'forced_keep': {'type': 'choice', 'allowed': ['no', 'session', 'save'], 'default': 'save'},
                   'forced_mark': {'type': 'bool', 'default': False},
+                  'forced_time_load': {'type': 'choice', 'allowed': ['now', 'filechange'], 'default': 'now'},
                   'show_timestamps': {'type': 'bool', 'default': True},
                   'history_length': {'type': 'int&-1', 'default': 0},
                   'history_time': {'type': 'choice', 'allowed': ['real', 'action'], 'default': 'action'},
                   'history_unread': {'type': 'bool', 'default': True},
-                  #'history_no_duplicates': {'type': 'choice', 'allowed': ['off', 'unlock', 'on'], 'default': 'off'},
-                  #'history_save': {'type': 'choice', 'allowed': ['none', 'unlock', 'all'], 'default': 'none'},
                   'notif': {'type': 'bool', 'default': True},
                   'notif_limit': {'type': 'int', 'default': 3},
                   'notif_timeout': {'type': 'int', 'default': 3},
                   'notif_lock': {'type': 'bool', 'default': False},
-                  'language': {'type': 'list', 'default': ('english')},
+                  'notif_icons': {'type': 'bool', 'default': True},
+                  'language': {'type': 'list', 'default': ('english', )},
                   'font_general': {'type': 'str', 'default': 'Roboto/Roboto-Regular.ttf'},
                   'font_achs': {'type': 'fontlist', 'default': {'all': 'Roboto/Roboto-Regular.ttf'}},
-                  'font_size_regular': {'type': 'int', 'default': 15},
-                  'font_size_small': {'type': 'int', 'default': 13},
+                  'font_achs_desc': {'type': 'fontlist', 'default': {}},
+                  'font_size_general': {'type': 'int', 'default': 15},
+                  'font_size_regular': {'type': 'fontlist', 'default': {'all': 15}},
+                  'font_size_small': {'type': 'fontlist', 'default': {'all': 13}},
                   'font_line_distance_regular': {'type': 'int', 'default': 16},
                   'font_line_distance_small': {'type': 'int', 'default': 16},
                   'color_background': {'type': 'color', 'default': (0, 0, 0)},
@@ -81,7 +89,14 @@ known_settings = {'delay': {'type': 'float', 'default': 0.5},
                   'color_text_lock': {'type': 'color', 'default': (128, 128, 128)},
                   'color_bar_bg': {'type': 'color', 'default': (128, 128, 128)},
                   'color_bar_fill': {'type': 'color', 'default': (255, 255, 255)},
-                  'color_scrollbar': {'type': 'color', 'default': (128, 128, 128)}}
+                  'color_bar_completed': {'type': 'color', 'default': (255, 255, 255)},
+                  'color_scrollbar': {'type': 'color', 'default': (128, 128, 128)},
+                  'save_timestamps': {'type': 'bool', 'default': True},
+                  'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'normal'},
+                  'savetime_mark': {'type': 'bool', 'default': False},
+                  'savetime_keep_locked': {'type': 'bool', 'default': False},
+                  'smooth_scale': {'type': 'bool', 'default': True},
+                  'api_key': {'type': 'str', 'default': ''}}
 
 def load_settings(appid, source):
     settings = {}
@@ -90,12 +105,13 @@ def load_settings(appid, source):
     settings = load_settings_file(settings, 'settings.txt')
     settings = load_settings_file(settings, f'settings_{source}.txt')
     settings = load_settings_file(settings, f'settings_{appid}.txt')
+    settings = load_settings_file(settings, f'settings_{appid}_{source}.txt')
     return settings
 
 def load_settings_file(settings, filename):
     filename = os.path.join('settings', filename)
     try:
-        with open(filename) as stgfile:
+        with open(filename, encoding='utf-8') as stgfile:
             stgtext = stgfile.read()
         stgtext = stgtext.split('\n')
         for sett in stgtext:
@@ -121,12 +137,19 @@ def load_settings_file(settings, filename):
                     as_color = (int(spl[0]), int(spl[1]), int(spl[2]))
                     if as_color[0] <= 255 or as_color[1] <= 255 or as_color[2] <= 255:
                         settings[sett[0]] = as_color
-                elif known_settings[sett[0]]['type'] == 'list' and len(sett[1].split(',')) > 0:
-                    settings[sett[0]] = sett[1].split(',')
+                elif known_settings[sett[0]]['type'] == 'list':
+                    if len(sett[1]) > 0:
+                        settings[sett[0]] = sett[1].split(',')
+                    else:
+                        settings[sett[0]] = tuple()
                 elif known_settings[sett[0]]['type'] == 'fontlist':
                     fonts = {}
+                    if 'all' in known_settings[sett[0]]['default']:
+                        fonts['all'] = known_settings[sett[0]]['default']['all']
                     spl = sett[1].split(';')
                     for s in spl:
+                        if len(s) == 0:
+                            continue
                         s = s.split(':')
                         if len(s) == 1:
                             fonts['all'] = s[0]
@@ -138,3 +161,26 @@ def load_settings_file(settings, filename):
     except FileNotFoundError:
         pass
     return settings
+
+if __name__ == '__main__':
+    s = ''
+    for n in known_settings.keys():
+        s += n
+        s += '='
+        if known_settings[n]['type'] == 'bool':
+            s += str(int(known_settings[n]['default']))
+        elif known_settings[n]['type'] == 'color':
+            s += ','.join(map(str, known_settings[n]['default']))
+        elif known_settings[n]['type'] == 'list':
+            s += ','.join(known_settings[n]['default'])
+        elif known_settings[n]['type'] == 'fontlist':
+            try:
+                s += str(known_settings[n]['default']['all'])
+            except (KeyError, TypeError):
+                pass
+        else:
+            s += str(known_settings[n]['default'])
+        s += '\n'
+    s = s[:len(s) - 1]
+    with open('settings/settings_default.txt', 'w') as def_file:
+        def_file.write(s)

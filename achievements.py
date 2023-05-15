@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
+import struct
 import pygame
-from showtext import multiline_text
 pygame.font.init()
 
 class Achievement:
@@ -9,7 +9,7 @@ class Achievement:
         self.name = achdata['name']
         self.display_name = achdata['displayName']
         self.description = achdata['description']
-        self.hidden = achdata['hidden']
+        self.hidden = achdata['hidden'] == '1'
 
         if 'icon' in achdata:
             self.icon = achdata['icon']
@@ -37,12 +37,23 @@ class Achievement:
             self.earned_time = 0.0
 
         self.force_unlock = False
-        if stg != None and stg['bar_force_unlock'] != 'no' and self.progress != None and self.progress.real_value >= self.progress.max_val and not self.earned:
+        if stg != None and stg['bar_force_unlock'] and self.progress != None and self.progress.real_value >= self.progress.max_val and not self.earned:
             self.earned = True
-            self.earned_time = time.time()
+            if stg['forced_time_load'] == 'now':
+                self.earned_time = time.time()
+            else:
+                self.earned_time = stats[self.progress.value['operand1']].fchecker.last_check
             self.force_unlock = True
 
+        self.ts_first = None
+        self.ts_earliest = None
+        if self.earned:
+            self.ts_first = self.earned_time
+            self.ts_earliest = self.earned_time
+
         self.has_desc = isinstance(self.display_name, str) or 'english' in self.description
+        self.long_desc = False
+        self.long_hidden_desc = False
 
         self.language = 'english'
         if isinstance(self.display_name, str):
@@ -58,12 +69,38 @@ class Achievement:
             if self.has_desc:
                 self.description_l = self.description[self.language]
 
-    def get_time(self, forced_mark):
-        dt = datetime.fromtimestamp(self.earned_time)
+    def get_time(self, savetime_shown, forced_mark, savetime_mark):
+        ts = self.earned_time
+        if savetime_shown == 'first':
+            ts = self.ts_first
+        elif savetime_shown == 'earliest':
+            ts = self.ts_earliest
+        dt = datetime.fromtimestamp(ts)
         tstring = dt.strftime('%d %b %Y %H:%M:%S')
+        if savetime_mark and ts != self.earned_time:
+            tstring += ' (S)'
         if forced_mark and self.force_unlock:
             tstring += ' (F)'
         return tstring
+
+    def update_time(self, t):
+        save_changed = False
+        self.earned_time = t
+        if self.ts_first == None:
+            self.ts_first = t
+            save_changed = True
+        if self.ts_earliest == None or t < self.ts_earliest:
+            self.ts_earliest = t
+            save_changed = True
+        return save_changed
+
+    def get_ts(self, savetime_shown):
+        if savetime_shown == 'first':
+            return self.ts_first
+        elif savetime_shown == 'earliest':
+            return self.ts_earliest
+        else:
+            return self.earned_time
 
 class AchievementProgress:
     def __init__(self, progressdata, stats=None):
@@ -108,11 +145,11 @@ class AchievementProgress:
             return (False, 'Unknown stat')
         return (True, None)
 
-def filter_achs(achs, state, hide_secrets):
+def filter_achs(achs, state, hide_secrets, unlocks_on_top):
     achs_f = []
     secrets_hidden = 0
     for ach in achs:
-        if hide_secrets and ach.hidden == '1' and not ach.earned:
+        if hide_secrets and ach.hidden and not ach.earned:
             secrets_hidden += 1
             continue
         if state == 1 and not ach.earned:
@@ -125,6 +162,14 @@ def filter_achs(achs, state, hide_secrets):
         if secrets_hidden == 1:
             dummy_desc = 'There is 1 more hidden achievement'
         achs_f.append(Achievement({'name': None, 'displayName': {'english': 'Hidden achievements'}, 'description': {'english': dummy_desc}, 'icon': None, 'icon_gray': 'hidden_dummy_ach_icon', 'hidden': '0'}))
+    if unlocks_on_top:
+        for u in range(len(achs_f)):
+            if not achs_f[u].earned:
+                break
+        for i in range(u + 1, len(achs_f)):
+            if achs_f[i].earned:
+                achs_f.insert(u, achs_f.pop(i))
+                u += 1
     return (achs_f, secrets_hidden)
 
 def update_achs(achs, newdata, achsfile, stg):
@@ -133,9 +178,11 @@ def update_achs(achs, newdata, achsfile, stg):
         change = {'ach': ach.display_name_l, 'ach_api': ach.name}
         dt_real = datetime.now()
         change['time_real'] = dt_real.strftime('%d %b %Y %H:%M:%S')
-        if achsfile.last_check != None:
+        if achsfile != None and achsfile.last_check != None:
             dt_action = datetime.fromtimestamp(achsfile.last_check)
             change['time_action'] = dt_action.strftime('%d %b %Y %H:%M:%S')
+        elif achsfile == None:
+            change['time_action'] = change['time_real']
 
         if newdata != None and ach.name in newdata:
             if 'progress' in newdata[ach.name] and 'max_progress' in newdata[ach.name]:
@@ -152,7 +199,7 @@ def update_achs(achs, newdata, achsfile, stg):
 
             if ach.earned != newdata[ach.name]['earned'] or (ach.force_unlock and newdata[ach.name]['earned']):
                 if not ach.earned or ach.force_unlock:
-                    ach.earned_time = newdata[ach.name]['earned_time']
+                    change['ts_change'] = ach.update_time(newdata[ach.name]['earned_time'])
                     change['type'] = 'unlock'
                     change['was_forced'] = False
                     dt_action = datetime.fromtimestamp(ach.earned_time)
@@ -160,15 +207,19 @@ def update_achs(achs, newdata, achsfile, stg):
                     if ach.force_unlock:
                         ach.force_unlock = False
                         change['was_forced'] = True
-                elif not ach.force_unlock:
-                    ach.earned_time = 0
+                else:
+                    ach.earned_time = 0.0
                     change['type'] = 'lock'
                     change['lock_all'] = False
+                    if not stg['savetime_keep_locked']:
+                        ach.ts_first = None
+                        ach.ts_earliest = None
+                        change['ts_change'] = True
                 ach.earned = newdata[ach.name]['earned']
             elif ach.earned_time != newdata[ach.name]['earned_time']:
-                change['old'] = ach.earned_time
-                ach.earned_time = newdata[ach.name]['earned_time']
                 change['type'] = 'time'
+                change['old'] = ach.earned_time
+                change['ts_change'] = ach.update_time(newdata[ach.name]['earned_time'])
                 change['new'] = ach.earned_time
         elif not ach.force_unlock:
             if ach.earned:
@@ -176,19 +227,27 @@ def update_achs(achs, newdata, achsfile, stg):
                 if newdata == None:
                     change['lock_all'] = True
                     change['time_action'] = change['time_real']
+                    ach.progress_reported = None
                 else:
                     change['lock_all'] = False
             ach.earned = False
-            ach.earned_time = 0
+            ach.earned_time = 0.0
 
         if 'type' in change.keys():
             changes.append(change)
 
     return (achs, changes)
 
-def convert_achs_format(data, source):
+def convert_achs_format(data, source, achs_crc32=None):
     conv = {}
-    if source == 'codex':
+    if source in ('codex', 'ali213'):
+        names = {'Achieved': 'Achieved', 'CurProgress': 'CurProgress',
+                 'MaxProgress': 'MaxProgress', 'UnlockTime': 'UnlockTime'}
+        if source == 'ali213':
+            names['Achieved'] = 'HaveAchieved'
+            names['CurProgress'] = 'nCurProgress'
+            names['MaxProgress'] = 'nMaxProgress'
+            names['UnlockTime'] = 'HaveAchievedTime'
         reading_ach = None
         for l in data.split('\n'):
             if len(l) > 0 and l[0] == '[' and l[-1] == ']':
@@ -199,22 +258,36 @@ def convert_achs_format(data, source):
                 spl = l.split('=')
                 if len(spl) != 2 or reading_ach == 'SteamAchievements':
                     continue
-                if spl[0] == 'Achieved':
+                if spl[0] == names['Achieved']:
                     conv[reading_ach]['earned'] = bool(int(spl[1]))
-                elif spl[0] == 'CurProgress' and spl[1] != '0':
+                elif spl[0] == names['CurProgress'] and spl[1] != '0':
                     dotspl = spl[1].split('.')
                     if len(dotspl) == 1:
                         conv[reading_ach]['progress'] = int(spl[1])
                     else:
                         conv[reading_ach]['progress'] = float(spl[1])
-                elif spl[0] == 'MaxProgress' and spl[1] != '0':
+                elif spl[0] == names['MaxProgress'] and spl[1] != '0':
                     dotspl = spl[1].split('.')
                     if len(dotspl) == 1:
                         conv[reading_ach]['max_progress'] = int(spl[1])
                     else:
                         conv[reading_ach]['max_progress'] = float(spl[1])
-                if spl[0] == 'UnlockTime':
-                    conv[reading_ach]['earned_time'] = int(spl[1])
+                if spl[0] == names['UnlockTime']:
+                    conv[reading_ach]['earned_time'] = float(spl[1])
+    elif source == 'sse':
+        for i in range(struct.unpack('i', data[:4])[0]):
+            c = struct.unpack('I', data[4 + 24 * i : 8 + 24 * i])[0]
+            if c in achs_crc32:
+                achname = achs_crc32[c]
+                conv[achname] = {}
+                conv[achname]['earned'] = bool(struct.unpack('i', data[24 + 24 * i : 28 + 24 * i])[0])
+                conv[achname]['earned_time'] = float(struct.unpack('i', data[12 + 24 * i : 16 + 24 * i])[0])
+    elif source == 'steam':
+        for ach in data:
+            achname = ach['apiname']
+            conv[achname] = {}
+            conv[achname]['earned'] = ach['achieved']
+            conv[achname]['earned_time'] = ach['unlocktime']
     else:
-        return data
+        return {}
     return conv

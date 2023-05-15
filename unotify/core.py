@@ -72,7 +72,7 @@ def notify(
 
     if urgency == urgencies.HIGH and timeout:
         Timer(timeout, _close_notification, args=[notifyid]).start()
-   
+
     if returnid:
         return notifyid
     else:

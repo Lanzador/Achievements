@@ -1,0 +1,2 @@
+bar_force_unlock=1
+savetime_shown=first
