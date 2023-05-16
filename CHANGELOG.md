@@ -1,3 +1,6 @@
+## v1.1.2
+- Fix SSE achievements not updating.
+
 ## v1.1.1
 - If bar length is set to 0, remove the empty space between the bar and the x/y text. (This was supposed to be in v1.1.0, but I forgot to finish it. And I also forgot to name the commit just now.)
 
