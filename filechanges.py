@@ -128,16 +128,19 @@ class FileChecker:
                 newdata = None
 
                 if self.filetype == 'player_achs':
-                    with open(self.path) as changed_file:
-                        if self.source == 'goldberg':
-                            try:
+                    m = 'rt'
+                    if self.source == 'sse':
+                        m = 'rb'
+                    with open(self.path, m) as changed_file:
+                        try:
+                            if self.source == 'goldberg':
                                 newdata = json.load(changed_file)
-                            except json.decoder.JSONDecodeError:
-                                print('Failed to read file (player achs). Will retry on next check.')
-                                self.last_check = 'Retry'
-                                return False, None
-                        elif self.source in ('codex', 'ali213'):
-                            newdata = changed_file.read()
+                            else:
+                                newdata = changed_file.read()
+                        except Exception:
+                            print('Failed to read file (player achs). Will retry on next check.')
+                            self.last_check = 'Retry'
+                            return False, None
 
                 elif self.filetype == 'stat':
                     if self.source == 'goldberg':
