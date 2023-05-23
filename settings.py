@@ -53,11 +53,16 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'frame_size': {'type': 'int', 'default': 2},
                   'frame_color_unlock': {'type': 'color', 'default': (255, 255, 255)},
                   'frame_color_lock': {'type': 'color', 'default': (128, 128, 128)},
+                  'frame_color_rare': {'type': 'color', 'default': None},
+                  'frame_color_rare_lock': {'type': 'color', 'default': None},
+                  'rare_below': {'type': 'float', 'default': 10.0},
                   'hidden_desc': {'type': 'str', 'default': '[Hidden achievement]'},
                   'hide_secrets': {'type': 'bool', 'default': False},
                   'unlocks_on_top': {'type': 'bool', 'default': False},
+                  'unlocks_timesort': {'type': 'bool', 'default': False},
+                  'sort_by_rarity': {'type': 'bool', 'default': False},
                   'bar_length': {'type': 'int', 'default': 300},
-                  'bar_unlocked': {'type': 'choice', 'allowed': ['show', 'full', 'hide'], 'default': 'full'},
+                  'bar_unlocked': {'type': 'choice', 'allowed': ['show', 'full', 'hide', 'zerolen'], 'default': 'full'},
                   'bar_hide_unsupported': {'type': 'choice', 'allowed': ['none', 'stat', 'all'], 'default': 'none'},
                   'bar_hide_secret': {'type': 'bool', 'default': True},
                   'bar_ignore_min': {'type': 'bool', 'default': False},
@@ -75,6 +80,8 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'notif_lock': {'type': 'bool', 'default': False},
                   'notif_icons': {'type': 'bool', 'default': True},
                   'language': {'type': 'list', 'default': ('english', )},
+                  'unlockrates': {'type': 'choice', 'allowed': ['none', 'load', 'name', 'desc'], 'default': 'name'},
+                  'unlockrates_expire': {'type': 'time', 'default': 3600},
                   'font_general': {'type': 'str', 'default': 'Roboto/Roboto-Regular.ttf'},
                   'font_achs': {'type': 'fontlist', 'default': {'all': 'Roboto/Roboto-Regular.ttf'}},
                   'font_achs_desc': {'type': 'fontlist', 'default': {}},
@@ -91,8 +98,9 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'color_bar_fill': {'type': 'color', 'default': (255, 255, 255)},
                   'color_bar_completed': {'type': 'color', 'default': (255, 255, 255)},
                   'color_scrollbar': {'type': 'color', 'default': (128, 128, 128)},
+                  'color_hover': {'type': 'color', 'default': (64, 64, 64)},
                   'save_timestamps': {'type': 'bool', 'default': True},
-                  'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'normal'},
+                  'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'first'},
                   'savetime_mark': {'type': 'bool', 'default': False},
                   'savetime_keep_locked': {'type': 'bool', 'default': False},
                   'smooth_scale': {'type': 'bool', 'default': True},
@@ -158,6 +166,19 @@ def load_settings_file(settings, filename):
                             for lang in langs:
                                 fonts[lang] = s[1]
                     settings[sett[0]] = fonts
+                elif known_settings[sett[0]]['type'] == 'time' and len(sett[1]) > 0:
+                    units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+                    num = sett[1]
+                    if sett[1][-1] in units:
+                        if len(sett[1]) > 1:
+                            num = num[:-1]
+                        else:
+                            continue
+                        unit = sett[1][-1]
+                    else:
+                        unit = 's'                    
+                    if len(num.split('.')) < 3 and num.replace('.', '').isnumeric():
+                        settings[sett[0]] = float(num) * units[unit]
     except FileNotFoundError:
         pass
     return settings
@@ -167,6 +188,9 @@ if __name__ == '__main__':
     for n in known_settings.keys():
         s += n
         s += '='
+        if known_settings[n]['default'] == None:
+            s += '\n'
+            continue
         if known_settings[n]['type'] == 'bool':
             s += str(int(known_settings[n]['default']))
         elif known_settings[n]['type'] == 'color':

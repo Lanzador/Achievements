@@ -2,10 +2,11 @@ import time
 from datetime import datetime
 import struct
 import pygame
+from showtext import long_text
 pygame.font.init()
 
 class Achievement:
-    def __init__(self, achdata, player_achs=None, stats=None, stg=None):
+    def __init__(self, achdata, player_achs=None, stats=None, ach_percentages=None, stg=None):
         self.name = achdata['name']
         self.display_name = achdata['displayName']
         self.description = achdata['description']
@@ -68,6 +69,16 @@ class Achievement:
             self.display_name_l = self.display_name[self.language]
             if self.has_desc:
                 self.description_l = self.description[self.language]
+
+        self.display_name_np = self.display_name_l
+        if stg['unlockrates'] != 'none' and ach_percentages != None:
+            for p in ach_percentages:
+                if p['name'] == self.name:
+                    self.rarity = round(p['percent'] * 10) / 10
+                    self.rarity_text = str(self.rarity)
+                    if not '.' in self.rarity_text:
+                        self.rarity_text += '.0'
+                    self.rarity_text = f' ({self.rarity_text}%)'
 
     def get_time(self, savetime_shown, forced_mark, savetime_mark):
         ts = self.earned_time
@@ -147,11 +158,20 @@ class AchievementProgress:
             return (False, 'Unsupported stat type')
         return (True, None)
 
-def filter_achs(achs, state, hide_secrets, unlocks_on_top):
+def filter_achs(achs, state, stg):
     achs_f = []
     secrets_hidden = 0
+
+    achs_copy = []
     for ach in achs:
-        if hide_secrets and ach.hidden and not ach.earned:
+        achs_copy.append(ach)
+    achs = achs_copy
+
+    if stg['unlockrates'] != 'none' and stg['sort_by_rarity']:
+        achs.sort(key=lambda a : a.rarity, reverse=True)
+
+    for ach in achs:
+        if stg['hide_secrets'] and ach.hidden and not ach.earned:
             secrets_hidden += 1
             continue
         if state == 1 and not ach.earned:
@@ -164,20 +184,27 @@ def filter_achs(achs, state, hide_secrets, unlocks_on_top):
         if secrets_hidden == 1:
             dummy_desc = 'There is 1 more hidden achievement'
         achs_f.append(Achievement({'name': None, 'displayName': {'english': 'Hidden achievements'}, 'description': {'english': dummy_desc}, 'icon': None, 'icon_gray': 'hidden_dummy_ach_icon', 'hidden': '0'}))
-    if unlocks_on_top:
+    if stg['unlocks_on_top']:
+        u = 1
         for u in range(len(achs_f)):
             if not achs_f[u].earned:
                 break
+            if u == len(achs_f) - 1:
+                u += 1
         for i in range(u + 1, len(achs_f)):
             if achs_f[i].earned:
                 achs_f.insert(u, achs_f.pop(i))
                 u += 1
+        if stg['unlocks_timesort']:
+            unlocked_slice = achs_f[:u]
+            unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
+            achs_f = unlocked_slice + achs_f[u:]
     return (achs_f, secrets_hidden)
 
 def update_achs(achs, newdata, achsfile, stg):
     changes = []
     for ach in achs:
-        change = {'ach': ach.display_name_l, 'ach_api': ach.name}
+        change = {'ach': ach.display_name_l, 'ach_api': ach.name, 'ach_obj': ach}
         dt_real = datetime.now()
         change['time_real'] = dt_real.strftime('%d %b %Y %H:%M:%S')
         if achsfile != None and achsfile.last_check != None:
@@ -188,13 +215,13 @@ def update_achs(achs, newdata, achsfile, stg):
 
         if newdata != None and ach.name in newdata:
             if 'progress' in newdata[ach.name] and 'max_progress' in newdata[ach.name]:
-                if not newdata[ach.name]['earned'] and (ach.progress_reported == None or ach.progress_reported[0] != newdata[ach.name]['progress'] or ach.progress_reported[1] != newdata[ach.name]['max_progress']):
+                if not newdata[ach.name]['earned'] and (ach.progress_reported != (newdata[ach.name]['progress'], newdata[ach.name]['max_progress'])):
                     ach.progress_reported = (newdata[ach.name]['progress'], newdata[ach.name]['max_progress'])
                     prg_change = {}
                     for k in change.keys():
                         prg_change[k] = change[k]
                     prg_change['type'] = 'progress_report'
-                    prg_change['value'] = (ach.progress_reported)
+                    prg_change['value'] = ach.progress_reported
                     changes.append(prg_change)
             else:
                 ach.progress_reported = None
@@ -234,6 +261,8 @@ def update_achs(achs, newdata, achsfile, stg):
                     change['lock_all'] = False
             ach.earned = False
             ach.earned_time = 0.0
+
+        change['ach_obj'] = ach
 
         if 'type' in change.keys():
             changes.append(change)

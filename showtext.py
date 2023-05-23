@@ -22,17 +22,16 @@ def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_ret
 
     for i in range(ignore_chars + 1, len(s)):
         if font.size(s[:i])[0] > max_width:
-            for j in range(i, 0, -1):
+            for j in range(i, 1, -1):
                 if font.size(s[:j] + '...')[0] <= max_width:
                     if not only_return:
                         show_text(screen, font, s[:j] + '...', place, color)
                     return s[:j] + '...'
-            if font.size('...')[0] <= max_width:
-                s = '...'
-            elif font.size(s[0])[0] <= max_width:
+            if font.size(s[0])[0] <= max_width:
                 s = s[0]
             else:
                 s = ''
+            break
 
     if not only_return:
         show_text(screen, font, s, place, color)
