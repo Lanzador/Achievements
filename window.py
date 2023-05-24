@@ -18,8 +18,17 @@ from settings import *
 if platform.uname().system == 'Windows':
     from plyer import notification
 elif platform.uname().system == 'Linux':
-    import unotify as notification
+    from gi import require_version
+    require_version('Notify', '0.7')
+    from gi.repository import Notify
+    from atexit import register as register_exit
+    from threading import Timer
     os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '0'
+    Notify.init('Init')
+    @register_exit
+    def goodbye():
+        Notify.uninit()
+        print('\nshutting down...')
 else:
     from plyer import notification
 
@@ -53,12 +62,22 @@ def send_notification(title, message, app_icon=None):
                 kwargs['app_icon'] = convert_ico(app_icon)
             except Exception:
                 pass
-    else:
+        return notification.notify(**kwargs)
+    elif platform.uname().system == 'Linux':
+        Notify.set_app_name(gamename)
+        if app_icon != None and stg['notif_icons']:
+            linux_notification = Notify.Notification.new(title,message,os.path.abspath(app_icon))
+        else:
+            linux_notification = Notify.Notification.new(title,message)
         # Set urgency to display notification on top of fullscreen apps
-        kwargs['urgency'] = notification.urgencies.HIGH
+        linux_notification.set_urgency(Notify.Urgency.CRITICAL)
+        if stg['notif_timeout'] > 0:
+            Timer(stg['notif_timeout'], linux_notification.close).start()
+        return linux_notification.show()
+    else:
         if app_icon != None and stg['notif_icons']:
             kwargs['app_icon'] = app_icon
-    return notification.notify(**kwargs)
+        return notification.notify(**kwargs)
 
 def send_steam_request(name, link):
     if not name in ('appdetails', 'GetGlobalAchievementPercentagesForApp'):
