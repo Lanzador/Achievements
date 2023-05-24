@@ -68,7 +68,11 @@ def send_steam_request(name, link):
     try:
         r = requests.get(link)
         if int(r.status_code / 100) != 4:
-            r = r.json()
+            try:
+                r = r.json()
+            except requests.exceptions.JSONDecodeError:
+                print(f'JSON decode error ({name})')
+                return None
             try:
                 skey = 'playerstats'
                 if name == 'appdetails':
