@@ -559,7 +559,7 @@ historybutton = pygame.image.load('images/history.png')
 backbutton = pygame.image.load('images/back.png')
 clearbutton = pygame.image.load('images/clear.png')
 unlocksbutton = pygame.image.load('images/unlocks.png')
-notifsbutton = pygame.image.load('images/notifs.png')
+# notifsbutton = pygame.image.load('images/notifs.png')
 unreadicon = pygame.image.load('images/unread.png')
 unreadicon2 = pygame.image.load('images/unread2.png')
 lockallicon = pygame.image.load('images/lock_all.png')
@@ -1128,12 +1128,13 @@ while running:
                 keys = pygame.key.get_pressed()
                 t = '\n'
                 t += a.display_name_np + '\n'
-                if a.has_desc and (a.earned or not a.hidden or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])):
-                    t += a.description_l
-                    if stg['unlockrates'] == 'desc':
-                        t = t[:len(t) - len(a.rarity_text)]
-                    t += '\n'
-                t += f' - API name: {a.name}\n'
+                if a.earned or not a.hidden or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
+                    if a.has_desc:
+                        t += a.description_l
+                        if stg['unlockrates'] == 'desc':
+                            t = t[:len(t) - len(a.rarity_text)]
+                        t += '\n'
+                    t += f' - API name: {a.name}\n'
                 if not isinstance(a.display_name, str):
                     t += f" - Languages: {', '.join(a.display_name.keys())}\n"
                 t += f' - Hidden: {a.hidden}'
