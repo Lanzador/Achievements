@@ -71,7 +71,7 @@ class Achievement:
                 self.description_l = self.description[self.language]
 
         self.display_name_np = self.display_name_l
-        if stg['unlockrates'] != 'none' and ach_percentages != None:
+        if stg != None and stg['unlockrates'] != 'none' and ach_percentages != None:
             for p in ach_percentages:
                 if p['name'] == self.name:
                     self.rarity = round(p['percent'] * 10) / 10
@@ -79,6 +79,9 @@ class Achievement:
                     if not '.' in self.rarity_text:
                         self.rarity_text += '.0'
                     self.rarity_text = f' ({self.rarity_text}%)'
+        else:
+             self.rarity = -1.0
+             self.rarity_text = ''
 
     def get_time(self, savetime_shown, forced_mark, savetime_mark):
         ts = self.earned_time

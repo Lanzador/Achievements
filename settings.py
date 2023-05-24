@@ -202,6 +202,11 @@ if __name__ == '__main__':
                 s += str(known_settings[n]['default']['all'])
             except (KeyError, TypeError):
                 pass
+        elif known_settings[n]['type'] == 'time':
+            if known_settings[n]['default'] == 3600:
+                s += '1h'
+            else:
+                s += str(known_settings[n]['default']) + 's'
         else:
             s += str(known_settings[n]['default'])
         s += '\n'

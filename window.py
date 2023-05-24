@@ -440,11 +440,15 @@ else:
 
 stg = load_settings(appid, achdata_source)
 
-if stg['window_size_x'] < 274 or stg['window_size_y'] < 132:
-    print('Window size must be at least 274x132')
-    sys.exit()
-elif stg['gamebar_position'] == 'under' and stg['window_size_y'] < 144:
-    print('With gamebar_position=under, window size must be at least 274x144')
+min_size_x = 274
+min_size_y = 132
+if stg['history_length'] == -1:
+    min_size_x = 174
+if stg['gamebar_position'] == 'under':
+    min_size_y = 144
+
+if stg['window_size_x'] < min_size_x or stg['window_size_y'] < min_size_y:
+    print(f'Window size must be at least {min_size_x}x{min_size_y} with current settings')
     sys.exit()
 if stg['bar_length'] == 0:
     stg['bar_length'] = -10
@@ -454,6 +458,21 @@ if stg['frame_color_rare'] == None:
     stg['frame_color_rare'] = stg['frame_color_unlock']
 if stg['frame_color_rare_lock'] == None:
     stg['frame_color_rare_lock'] = stg['frame_color_lock']
+
+header_h = 58
+if stg['gamebar_position'] in ('repname', 'hide'):
+    header_h = 47
+elif stg['gamebar_position'] == 'under':
+    header_h = 70
+
+if achdata_source == 'steam':
+    if len(stg['api_key']) == 0:
+        print('An API key is required to track achievements from Steam')
+        sys.exit()
+    source_extra = check_alias(source_extra)
+    if source_extra == None or not source_extra.isnumeric():
+        print('Invalid Steam user ID')
+        sys.exit()
 
 if 'LnzAch_gamename' in os.environ:
     gamename = os.environ['LnzAch_gamename']
@@ -511,21 +530,6 @@ if stg['unlockrates'] != 'none':
     else:
         with open(f'games/{appid}/unlockrates.json') as percentfile:
             ach_percentages = json.load(percentfile)['achievements']
-
-if achdata_source == 'steam':
-    if len(stg['api_key']) == 0:
-        print('An API key is required to track achievements from Steam')
-        sys.exit()
-    source_extra = check_alias(source_extra)
-    if source_extra == None or not source_extra.isnumeric():
-        print('Invalid Steam user ID')
-        sys.exit()
-
-header_h = 58
-if stg['gamebar_position'] in ('repname', 'hide'):
-    header_h = 47
-elif stg['gamebar_position'] == 'under':
-    header_h = 70
 
 save_dir = get_save_dir(appid, achdata_source, source_extra)
 
@@ -1115,6 +1119,8 @@ while running:
                 elif viewing != 'history' and scroll + hover_ach < len(achs_f):
                     a = achs_f[scroll + hover_ach]
                 else:
+                    continue
+                if a.name == None:
                     continue
                 keys = pygame.key.get_pressed()
                 t = '\n'
