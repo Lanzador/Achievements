@@ -91,6 +91,9 @@ Some rare games occasionally display "Achievement Progress" notifications on Ste
 ### Fix for always empty progressbars
 Some games' achievement pages on Steam show empty progressbars with progress numbers always being the same as target numbers. By default, this behavior is copied. Enable `bar_ignore_min` for the game in settings as a workaround. Ha, can't do that on Steam!
 
+### Unlock rates
+Achievement percentages are requested from Steam, then they're saved in case you want to play while offline.
+
 ### Customization
 Colors and fonts can be changed. Different settings can be used for specific emulators or games.
 
@@ -120,15 +123,25 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `frame_color_lock` - color to use for icon frames for locked achievements. Default: `128,128,128`
 
+`frame_color_rare` - color to use for icon frames for unlocked rare achievements. Default: Empty
+
+`frame_color_rare_lock` - color to use for icon frames for locked rare achievements. Default: Empty
+
+`rare_below` - rarity percentage below which achievements are considered "rare" for the above settings. Default: `10.0`
+
 `hidden_desc` - replacement description to show for locked hidden achievements. Default: `[Hidden achievement]`
 
 `hide_secrets` - if true, hidden achievements are removed from the list and their count is shown at the bottom. Default: `false`
 
 `unlocks_on_top` - move unlocked achievements to the top of the list. Default: `false`
 
+`unlocks_timesort` - sort unlocked achievements by time, similar to the unlocks history screen. Does nothing if `unlocks_on_top` is disabled. Default: `false`
+
+`sort_by_rarity` - sort achievements by rarity instead of keeping their normal order. Default: `false`
+
 `bar_length` - length of achievement progress bars, also affects achievement progress notifications in history. Default: `300`
 
-`bar_unlocked` - behavior of progressbars under unlocked achievements. `show` - no special rules; `full` - show a full bar even when the progress value is below the target (default); `hide` - hide the bar.
+`bar_unlocked` - behavior of progressbars under unlocked achievements. `show` - no special rules; `full` - show a full bar even when the progress value is below the target (default); `hide` - hide the bar; `zerolen` - hide the bar, but keep `full`-like progress numbers.
 
 `bar_hide_unsupported` - hide progressbar if it's value can't be calculated. `none` - never (default); `stat` - hide if progress formula or stat type is unsupported, keep if stat not present in `stats.txt`; `all` - always.
 
@@ -164,6 +177,10 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `language` - comma-separated (no spaces) list of languages to use for achievements. First available language is used. If nothing is available, English is used. Default: `english`
 
+`unlockrates` - where to show achievement rarity percentages. `none` - don't load unlock rates; `load` - load unlock rates (for things like sorting), but don't display them; `name` - show unlock rates next to achievement names (default); `desc` - show them after descriptions.
+
+`unlockrates_expire` - time after which saved unlock rates are considered expired and replaced (if possible). Avilable units: `s`, `m`, `h`, `d`. Default: `1h`
+
 `font_general` - name of font file (inside the `fonts` folder) to use for everything except achievements. Default: `Roboto/Roboto-Regular.ttf`
 
 `font_achs` - name of font file(s) to use for achievements. Format: `Font.ttf;language,language2:OtherFont.ttf` - the font without a language prefix is used for all languages without a language-specific font. Default: `Roboto/Roboto-Regular.ttf`
@@ -198,7 +215,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `save_timestamps` - save first and earliest timestamps of each achievement to a file. Default: `true`
 
-`savetime_shown` - timestamps to display. `normal` - timestamp currently saved by emulator (default); `first` - first timestamp that was detected; `earliest` - the earliest out of all detected timestamps.
+`savetime_shown` - timestamps to display. `normal` - timestamp currently saved by emulator; `first` - first timestamp that was detected (default); `earliest` - the earliest out of all detected timestamps.
 
 `savetime_mark` - show `(S)` next to an achievement's timestamp if the displayed timestamp is different from the "normal" one. Default: `false`
 
@@ -207,6 +224,12 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 `smooth_scale` - use `pygame.transform.smoothscale` instead of `pygame.transform.scale` to resize achievement icons when needed. Default: `true`
 
 `api_key` - Steam Web API key. Required to track achievements from Steam. Default: Empty
+
+## Unobvious features
+
+- `LnzAch_gamename` environment variable can be used to replace game name. Someone requested this.
+
+- Clicking an achievement will print some information about it. Hold `SHIFT` to include descriptions for hidden achievements.
 
 ## Icon converter
 Windows doesn't accept `.jpg` icons for notifications, so I have to convert them to `.ico`. Doing this every time a notification is shown adds some delay.

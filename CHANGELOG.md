@@ -1,3 +1,13 @@
+## v1.2.0
+- Achievement unlock rates. Can be added after achievement name or after its description. They're saved in a file for offline access. Achievements can be sorted by rarity in settings. Different colors can be set for rare achievements.
+- No longer freezes during achievements/stats requests when tracking achievements from Steam.
+- "History unlocks" screen where unlocks are sorted by time. This can also be enabled for the main list.
+- Changed default for `savetime_shown` to `first`. It makes sense because there are likely cases where an achievement gets re-unlocked normally after a "force-unlock". In general, you usually don't want timestamps to change. Note that if you disable `save_timestamps`, they'll still be saved within the current session.
+- Added `bar_unlocke=zerolen`, which hides the bar, but keeps the numbers (their behavior is similar to `full`).
+- Highlight achievements when they're hovered over. Highlight color can be changed in settings.
+- Click an achievement to print some info about it. Hold `SHIFT` to include description if the achievement is hidden. I also made an option to hold `CTRL` to choose a language for name/description, but commented it out since `input()` freezes everything and kills `pyw`.
+- Other minor things.
+
 ## v1.1.2
 - Fix SSE achievements not updating.
 
