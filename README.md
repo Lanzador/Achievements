@@ -229,7 +229,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 - `LnzAch_gamename` environment variable can be used to replace game name. Someone requested this.
 
-- Clicking an achievement will print some information about it. Hold `SHIFT` to include descriptions for hidden achievements.
+- Clicking an achievement will print some information about it. Hold `SHIFT` to include descriptions and API names for hidden achievements.
 
 ## Icon converter
 Windows doesn't accept `.jpg` icons for notifications, so I have to convert them to `.ico`. Doing this every time a notification is shown adds some delay.

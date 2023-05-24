@@ -1,3 +1,7 @@
+## v1.2.1
+- Hide API names when clicking hidden achievements, unless holding `SHIFT`.
+- Don't load unused image; remove `savetime_shown=first` from emulator-specific settings; mention Steam user IDs in `alias.txt` template.
+
 ## v1.2.0
 - Achievement unlock rates. Can be added after achievement name or after its description. They're saved in a file for offline access. Achievements can be sorted by rarity in settings. Different colors can be set for rare achievements.
 - No longer freezes during achievements/stats requests when tracking achievements from Steam.
