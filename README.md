@@ -251,15 +251,13 @@ List of random ideas that *might* get added/changed someday. A lot of these are 
 
 - Add code comments
 
-- Load and show unlock rates
-
 - Search by name/description
-
-- Unlock history showing unlocked achievements sorted by unlock time
 
 - Notification sound
 
 - Save current achievement states to notify about changes on launch
+
+- Increment-only stats
 
 - Get stat display names
 
@@ -267,17 +265,13 @@ List of random ideas that *might* get added/changed someday. A lot of these are 
 
 - Display progressbar for (un)locks in history
 
-- Option to always show hidden descriptions
-
-- Try to remove freezing when requesting achievements from Steam
-
 - A way to see emulator & AppID (+ program version) inside the program
 
 - Some basic keyboard controls
 
 - Replacement icons (locked and unlocked) for achievements without icons? (+ icon for "Too many notifications" notification)
 
-- Option to show if the achievement was hidden (At least in history)
+- Date/time format option
 
 - If no stat default is set in `stats.txt`, use 0
 
@@ -285,12 +279,8 @@ List of random ideas that *might* get added/changed someday. A lot of these are 
 
 - Load-only modes for `forced_keep`, `save_timestamps`?
 
-- Copying achievement info or stats
-
 - Get rid of `int&-1` setting type
-
-- Show unlocks with unknown API names somewhere??
 
 - Allow loading different button images with different settings files?
 
-- Per-achievement settings???
+- Small square buttons?

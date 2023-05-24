@@ -514,7 +514,7 @@ if stg['unlockrates'] != 'none':
     try:
         with open(f'games/{appid}/unlockrates.json') as percentfile:
             percentdata = json.load(percentfile)
-    except:
+    except FileNotFoundError:
         percentdata = None
     if percentdata == None or time.time() >= percentdata['time'] + stg['unlockrates_expire']:
         steam_req = send_steam_request('GetGlobalAchievementPercentagesForApp', f'https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid={appid}')
@@ -532,8 +532,7 @@ if stg['unlockrates'] != 'none':
         elif steam_req == None:
             stg['unlockrates'] = 'none'
     else:
-        with open(f'games/{appid}/unlockrates.json') as percentfile:
-            ach_percentages = json.load(percentfile)['achievements']
+        ach_percentages = percentdata['achievements']
 
 save_dir = get_save_dir(appid, achdata_source, source_extra)
 
