@@ -22,7 +22,6 @@ elif platform.uname().system == 'Linux':
     require_version('Notify', '0.7')
     from gi.repository import Notify
     from atexit import register as register_exit
-    from threading import Timer
     os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '0'
     Notify.init('Init')
     @register_exit
@@ -72,7 +71,7 @@ def send_notification(title, message, app_icon=None):
         # Set urgency to display notification on top of fullscreen apps
         linux_notification.set_urgency(Notify.Urgency.CRITICAL)
         if stg['notif_timeout'] > 0:
-            Timer(stg['notif_timeout'], linux_notification.close).start()
+            threading.Timer(stg['notif_timeout'], linux_notification.close).start()
         return linux_notification.show()
     else:
         if app_icon != None and stg['notif_icons']:
