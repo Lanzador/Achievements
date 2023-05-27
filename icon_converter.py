@@ -14,20 +14,20 @@ if '*' in appids:
         if f.is_dir() and f.name.isnumeric():
             appids.add(f.name)
 else:
+    with open('games/alias.txt') as aliasfile:
+        alias = aliasfile.read()
+    alias = alias.split('\n')
+    for l in alias:
+        spl = l.split('=')
+        if len(spl) > 1 and spl[1] in appids:
+            appids.discard(spl[1])
+            appids.add(spl[0].split()[0])
+
     numeric = set()
     for appid in appids:
         if appid.isnumeric():
             numeric.add(appid)
     appids = numeric
-
-with open('games/alias.txt') as aliasfile:
-    alias = aliasfile.read()
-alias = alias.split('\n')
-for l in alias:
-    spl = l.split('=')
-    if len(spl) > 1 and spl[1] in appids:
-        appids.discard(spl[1])
-        appids.add(spl[0].split()[0])
 
 done_apps = 0
 errors = {}
