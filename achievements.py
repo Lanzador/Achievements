@@ -71,29 +71,34 @@ class Achievement:
                 self.description_l = self.description[self.language]
 
         self.display_name_np = self.display_name_l
+        self.rarity = -1.0
+        self.rarity_text = ''
+        self.rare = False
         if stg != None and stg['unlockrates'] != 'none' and ach_percentages != None:
-            for p in ach_percentages:
-                if p['name'] == self.name:
-                    self.rarity = round(p['percent'] * 10) / 10
-                    self.rarity_text = str(self.rarity)
-                    if not '.' in self.rarity_text:
-                        self.rarity_text += '.0'
-                    self.rarity_text = f' ({self.rarity_text}%)'
-        else:
-             self.rarity = -1.0
-             self.rarity_text = ''
+            if self.name in ach_percentages:
+                self.rarity = round(ach_percentages[self.name] * 10) / 10
+                self.rarity_text = str(self.rarity)
+                if not '.' in self.rarity_text:
+                    self.rarity_text += '.0'
+                self.rarity_text = f' ({self.rarity_text}%)'
+                if self.rarity < stg['rare_below']:
+                    self.rare = True
 
-    def get_time(self, savetime_shown, forced_mark, savetime_mark):
-        ts = self.earned_time
+    def get_ts(self, savetime_shown):
         if savetime_shown == 'first':
-            ts = self.ts_first
+            return self.ts_first
         elif savetime_shown == 'earliest':
-            ts = self.ts_earliest
+            return self.ts_earliest
+        else:
+            return self.earned_time
+
+    def get_time(self, stg):
+        ts = self.get_ts(stg['savetime_shown'])
         dt = datetime.fromtimestamp(ts)
         tstring = dt.strftime('%d %b %Y %H:%M:%S')
-        if savetime_mark and ts != self.earned_time:
+        if stg['savetime_mark'] and ts != self.earned_time:
             tstring += ' (S)'
-        if forced_mark and self.force_unlock:
+        if stg['forced_mark'] and self.force_unlock:
             tstring += ' (F)'
         return tstring
 
@@ -107,14 +112,6 @@ class Achievement:
             self.ts_earliest = t
             save_changed = True
         return save_changed
-
-    def get_ts(self, savetime_shown):
-        if savetime_shown == 'first':
-            return self.ts_first
-        elif savetime_shown == 'earliest':
-            return self.ts_earliest
-        else:
-            return self.earned_time
 
 class AchievementProgress:
     def __init__(self, progressdata, stats=None):
@@ -164,45 +161,56 @@ class AchievementProgress:
 def filter_achs(achs, state, stg):
     achs_f = []
     secrets_hidden = 0
+    first_lock = 1
 
-    achs_copy = []
-    for ach in achs:
-        achs_copy.append(ach)
-    achs = achs_copy
+    achs = achs.copy()
 
     if stg['unlockrates'] != 'none' and stg['sort_by_rarity']:
         achs.sort(key=lambda a : a.rarity, reverse=True)
 
     for ach in achs:
-        if stg['hide_secrets'] and ach.hidden and not ach.earned:
-            secrets_hidden += 1
-            continue
         if state == 1 and not ach.earned:
             continue
         if state == 2 and ach.earned:
             continue
-        achs_f.append(ach)
+
+        if stg['secrets'] != 'normal' and ach.hidden and not ach.earned:
+            secrets_hidden += 1
+            if stg['secrets'] == 'hide':
+                continue
+            elif stg['secrets'] == 'bottom':
+                achs_f.append(ach)
+                continue
+ 
+        if stg['unlocks_on_top'] and ach.earned:
+            achs_f.insert(first_lock - 1, ach)
+            first_lock += 1
+            continue
+        
+        insert_at = len(achs_f)
+        if stg['secrets'] == 'bottom':
+            insert_at -= secrets_hidden
+        achs_f.insert(insert_at, ach)
+
     if state != 1 and secrets_hidden > 0:
+        insert_at = len(achs_f)
+        if stg['secrets'] == 'bottom':
+            insert_at = -secrets_hidden
+
         dummy_desc = f'There are {secrets_hidden} more hidden achievements'
         if secrets_hidden == 1:
             dummy_desc = 'There is 1 more hidden achievement'
-        achs_f.append(Achievement({'name': None, 'displayName': {'english': 'Hidden achievements'}, 'description': {'english': dummy_desc}, 'icon': None, 'icon_gray': 'hidden_dummy_ach_icon', 'hidden': '0'}))
-    if stg['unlocks_on_top']:
-        u = 1
-        for u in range(len(achs_f)):
-            if not achs_f[u].earned:
-                break
-            if u == len(achs_f) - 1:
-                u += 1
-        for i in range(u + 1, len(achs_f)):
-            if achs_f[i].earned:
-                achs_f.insert(u, achs_f.pop(i))
-                u += 1
-        if stg['unlocks_timesort']:
-            unlocked_slice = achs_f[:u]
-            unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
-            achs_f = unlocked_slice + achs_f[u:]
-    return (achs_f, secrets_hidden)
+        achs_f.insert(insert_at, Achievement({'name': None, 'displayName': {'english': 'Hidden achievements'}, 'description': {'english': dummy_desc},
+                                              'icon': None, 'icon_gray': 'hidden_dummy_ach_icon', 'hidden': '0'}))
+
+    if stg['unlocks_timesort'] and (stg['unlocks_on_top'] or state == 1) and state != 2:
+        if state == 1:
+            first_lock = len(achs_f)
+        unlocked_slice = achs_f[:first_lock]
+        unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
+        achs_f = unlocked_slice + achs_f[first_lock:]
+
+    return achs_f
 
 def update_achs(achs, newdata, achsfile, stg):
     changes = []
@@ -310,18 +318,19 @@ def convert_achs_format(data, source, achs_crc32=None):
                     conv[reading_ach]['earned_time'] = float(spl[1])
     elif source == 'sse':
         for i in range(struct.unpack('i', data[:4])[0]):
-            c = struct.unpack('I', data[4 + 24 * i : 8 + 24 * i])[0]
+            e = data[4 + 24 * i : 28 + 24 * i]
+            c = struct.unpack('I', e[0:4])[0]
             if c in achs_crc32:
                 achname = achs_crc32[c]
                 conv[achname] = {}
-                conv[achname]['earned'] = bool(struct.unpack('i', data[24 + 24 * i : 28 + 24 * i])[0])
-                conv[achname]['earned_time'] = float(struct.unpack('i', data[12 + 24 * i : 16 + 24 * i])[0])
+                conv[achname]['earned'] = bool(struct.unpack('i', e[20:24])[0])
+                conv[achname]['earned_time'] = float(struct.unpack('i', e[8:12])[0])
     elif source == 'steam':
         for ach in data:
             achname = ach['apiname']
             conv[achname] = {}
             conv[achname]['earned'] = ach['achieved']
-            conv[achname]['earned_time'] = ach['unlocktime']
+            conv[achname]['earned_time'] = float(ach['unlocktime'])
     else:
         return {}
     return conv

@@ -4,6 +4,9 @@ def get_game_name(appid):
     try:
         with open('games/games.txt', encoding='utf-8') as namefile:
             namelist = namefile.read()
+        if len(namelist) > 0 and namelist[-1] != '\n':
+            with open('games/games.txt', 'a', encoding='utf-8') as gamestxt:
+                gamestxt.write('\n')
         namelist = namelist.split('\n')
         for namepair in namelist:
             namepair = namepair.split('=')
@@ -57,7 +60,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'frame_color_rare_lock': {'type': 'color', 'default': None},
                   'rare_below': {'type': 'float', 'default': 10.0},
                   'hidden_desc': {'type': 'str', 'default': '[Hidden achievement]'},
-                  'hide_secrets': {'type': 'bool', 'default': False},
+                  'secrets': {'type': 'choice', 'allowed': ['normal', 'hide', 'bottom'], 'default': 'normal'},
                   'unlocks_on_top': {'type': 'bool', 'default': False},
                   'unlocks_timesort': {'type': 'bool', 'default': False},
                   'sort_by_rarity': {'type': 'bool', 'default': False},
@@ -79,7 +82,8 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'notif_timeout': {'type': 'int', 'default': 3},
                   'notif_lock': {'type': 'bool', 'default': False},
                   'notif_icons': {'type': 'bool', 'default': True},
-                  'language': {'type': 'list', 'default': ('english', )},
+                  'language': {'type': 'list', 'default': ['english']},
+                  'language_requests': {'type': 'str', 'default': None},
                   'unlockrates': {'type': 'choice', 'allowed': ['none', 'load', 'name', 'desc'], 'default': 'name'},
                   'unlockrates_expire': {'type': 'time', 'default': 3600},
                   'font_general': {'type': 'str', 'default': 'Roboto/Roboto-Regular.ttf'},
@@ -96,14 +100,19 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'color_text_lock': {'type': 'color', 'default': (128, 128, 128)},
                   'color_bar_bg': {'type': 'color', 'default': (128, 128, 128)},
                   'color_bar_fill': {'type': 'color', 'default': (255, 255, 255)},
-                  'color_bar_completed': {'type': 'color', 'default': (255, 255, 255)},
+                  'color_bar_completed': {'type': 'color', 'default': None},
                   'color_scrollbar': {'type': 'color', 'default': (128, 128, 128)},
-                  'color_hover': {'type': 'color', 'default': (64, 64, 64)},
+                  'color_achbg_unlock': {'type': 'color', 'default': None},
+                  'color_achbg_lock': {'type': 'color', 'default': None},
+                  'color_achbg_rare': {'type': 'color', 'default': None},
+                  'color_achbg_rare_lock': {'type': 'color', 'default': None},
+                  'color_achbg_hover': {'type': 'color', 'cbn': '', 'default': (64, 64, 64)},
                   'save_timestamps': {'type': 'bool', 'default': True},
                   'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'first'},
                   'savetime_mark': {'type': 'bool', 'default': False},
                   'savetime_keep_locked': {'type': 'bool', 'default': False},
                   'smooth_scale': {'type': 'bool', 'default': True},
+                  'stat_display_names': {'type': 'bool', 'default': True},
                   'api_key': {'type': 'str', 'default': ''}}
 
 def load_settings(appid, source):
@@ -124,9 +133,11 @@ def load_settings_file(settings, filename):
         stgtext = stgtext.split('\n')
         for sett in stgtext:
             sett = sett.split('=')
-            if len(sett) == 2 and sett[0] in known_settings:
-                if known_settings[sett[0]]['type'] == 'str':
-                    settings[sett[0]] = sett[1]
+            if len(sett) > 1 and sett[0] in known_settings:
+                if (known_settings[sett[0]]['default'] == None or 'cbn' in known_settings[sett[0]]) and sett[1] == '':
+                    settings[sett[0]] = None
+                elif known_settings[sett[0]]['type'] == 'str':
+                    settings[sett[0]] = '='.join(sett[1:])
                 elif known_settings[sett[0]]['type'] == 'int' and sett[1].isnumeric():
                     settings[sett[0]] = int(sett[1])
                 elif known_settings[sett[0]]['type'] == 'int&-1' and (sett[1].isnumeric() or sett[1] == '-1'):
@@ -134,7 +145,7 @@ def load_settings_file(settings, filename):
                 elif known_settings[sett[0]]['type'] == 'float' and len(sett[1].split('.')) < 3 and sett[1].replace('.', '').isnumeric():
                     settings[sett[0]] = float(sett[1])
                 elif known_settings[sett[0]]['type'] == 'bool' and sett[1].lower() in ('0', '1', 'false', 'true'):
-                    if sett[1] == '1' or sett[1] == sett[1].lower() == 'true':
+                    if sett[1] == '1' or sett[1].lower() == 'true':
                         settings[sett[0]] = True
                     else:
                         settings[sett[0]] = False
@@ -149,7 +160,7 @@ def load_settings_file(settings, filename):
                     if len(sett[1]) > 0:
                         settings[sett[0]] = sett[1].split(',')
                     else:
-                        settings[sett[0]] = tuple()
+                        settings[sett[0]] = list()
                 elif known_settings[sett[0]]['type'] == 'fontlist':
                     fonts = {}
                     if 'all' in known_settings[sett[0]]['default']:
@@ -179,6 +190,8 @@ def load_settings_file(settings, filename):
                         unit = 's'                    
                     if len(num.split('.')) < 3 and num.replace('.', '').isnumeric():
                         settings[sett[0]] = float(num) * units[unit]
+            elif sett[0] == 'add_file' and len(sett) > 1 and len(sett[1]) > 0:
+                settings = load_settings_file(settings, sett[1])
     except FileNotFoundError:
         pass
     return settings

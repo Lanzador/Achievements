@@ -1,7 +1,7 @@
 from filechanges import FileChecker
 
 class Stat:
-    def __init__(self, fileinfo, s_type, default, sleep_t):
+    def __init__(self, fileinfo, s_type, default, sleep_t, stat_dnames):
         fileinfo['type'] = s_type
         self.name = fileinfo['name']
         self.type = s_type
@@ -10,6 +10,10 @@ class Stat:
         if fileinfo['source'] != 'steam':
             self.fchecker = FileChecker('stat', fileinfo, sleep_t)
             self.update_val(True)
+
+        self.dname = self.name
+        if self.name in stat_dnames and stat_dnames[self.name] != '':
+            self.dname = stat_dnames[self.name]
 
     def update_val(self, creation = False):
         if self.type in ('int', 'float'):

@@ -193,11 +193,12 @@ class FileChecker:
                             try:
                                 sse_data = changed_file.read()
                                 for i in range(struct.unpack('i', sse_data[:4])[0]):
-                                    if struct.unpack('I', sse_data[4 + 24 * i : 8 + 24 * i])[0] == self.locinfo['crc32']:
+                                    e = sse_data[4 + 24 * i : 28 + 24 * i]
+                                    if struct.unpack('I', e[0:4])[0] == self.locinfo['crc32']:
                                         if self.locinfo['type'] == 'int':
-                                            newdata = struct.unpack('i', sse_data[24 + 24 * i : 28 + 24 * i])[0]
+                                            newdata = struct.unpack('i', e[20:24])[0]
                                         elif self.locinfo['type'] == 'float':
-                                            newdata = struct.unpack('f', sse_data[24 + 24 * i : 28 + 24 * i])[0]
+                                            newdata = struct.unpack('f', e[20:24])[0]
                             except Exception:
                                 print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
                                 self.last_check = 'Retry'
