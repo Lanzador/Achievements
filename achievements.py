@@ -1,9 +1,7 @@
 import time
 from datetime import datetime
 import struct
-import pygame
 from showtext import long_text
-pygame.font.init()
 
 class Achievement:
     def __init__(self, achdata, player_achs=None, stats=None, ach_percentages=None, stg=None):
@@ -63,7 +61,7 @@ class Achievement:
         else:
             if stg != None:
                 for l in stg['language']:
-                    if l in self.display_name and l in self.description:
+                    if l in self.display_name:
                         self.language = l
                         break
             self.display_name_l = self.display_name[self.language]
@@ -95,7 +93,7 @@ class Achievement:
     def get_time(self, stg):
         ts = self.get_ts(stg['savetime_shown'])
         dt = datetime.fromtimestamp(ts)
-        tstring = dt.strftime('%d %b %Y %H:%M:%S')
+        tstring = dt.strftime(stg['strftime'])
         if stg['savetime_mark'] and ts != self.earned_time:
             tstring += ' (S)'
         if stg['forced_mark'] and self.force_unlock:
@@ -117,16 +115,16 @@ class AchievementProgress:
     def __init__(self, progressdata, stats=None):
         self.value = progressdata['value']
 
-        self.min_val = float(progressdata['min_val'])
-        self.max_val = float(progressdata['max_val'])
-        if self.value['operand1'] in stats:
-            self.min_val = stats[self.value['operand1']].to_stat_type((progressdata['min_val']))
-            self.max_val = stats[self.value['operand1']].to_stat_type((progressdata['max_val']))
-
         has_unknown_stats = False
         if len(self.value) == 2 and self.value['operation'] == 'statvalue':
             has_unknown_stats = not self.value['operand1'] in stats
         self.support, self.support_error = self.check_support(stats, has_unknown_stats)
+
+        self.min_val = float(progressdata['min_val'])
+        self.max_val = float(progressdata['max_val'])
+        if self.support:
+            self.min_val = stats[self.value['operand1']].to_stat_type((progressdata['min_val']))
+            self.max_val = stats[self.value['operand1']].to_stat_type((progressdata['max_val']))
         
         if stats != None:
             self.calculate(stats)
@@ -161,7 +159,7 @@ class AchievementProgress:
 def filter_achs(achs, state, stg):
     achs_f = []
     secrets_hidden = 0
-    first_lock = 1
+    first_lock = 0
 
     achs = achs.copy()
 
@@ -207,6 +205,9 @@ def filter_achs(achs, state, stg):
         if state == 1:
             first_lock = len(achs_f)
         unlocked_slice = achs_f[:first_lock]
+        for u in unlocked_slice:
+            if not u.earned:
+                print(u.name)
         unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
         achs_f = unlocked_slice + achs_f[first_lock:]
 
@@ -217,10 +218,10 @@ def update_achs(achs, newdata, achsfile, stg):
     for ach in achs:
         change = {'ach': ach.display_name_l, 'ach_api': ach.name, 'ach_obj': ach}
         dt_real = datetime.now()
-        change['time_real'] = dt_real.strftime('%d %b %Y %H:%M:%S')
+        change['time_real'] = dt_real.strftime(stg['strftime'])
         if achsfile != None and achsfile.last_check != None:
             dt_action = datetime.fromtimestamp(achsfile.last_check)
-            change['time_action'] = dt_action.strftime('%d %b %Y %H:%M:%S')
+            change['time_action'] = dt_action.strftime(stg['strftime'])
         elif achsfile == None:
             change['time_action'] = change['time_real']
 
@@ -243,7 +244,7 @@ def update_achs(achs, newdata, achsfile, stg):
                     change['type'] = 'unlock'
                     change['was_forced'] = False
                     dt_action = datetime.fromtimestamp(ach.earned_time)
-                    change['time_action'] = dt_action.strftime('%d %b %Y %H:%M:%S')
+                    change['time_action'] = dt_action.strftime(stg['strftime'])
                     if ach.force_unlock:
                         ach.force_unlock = False
                         change['was_forced'] = True
@@ -314,7 +315,7 @@ def convert_achs_format(data, source, achs_crc32=None):
                         conv[reading_ach]['max_progress'] = int(spl[1])
                     else:
                         conv[reading_ach]['max_progress'] = float(spl[1])
-                if spl[0] == names['UnlockTime']:
+                elif spl[0] == names['UnlockTime']:
                     conv[reading_ach]['earned_time'] = float(spl[1])
     elif source == 'sse':
         for i in range(struct.unpack('i', data[:4])[0]):

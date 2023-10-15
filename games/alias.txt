@@ -1,4 +1,6 @@
 Use this to assign short names to games and load them without remembering or checking AppIDs.
 Can also be used for Steam user IDs.
 Format: AppID, then name, separated with an equals sign.
+
 000000=example
+76561190000000000=example_user

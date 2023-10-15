@@ -27,6 +27,7 @@ forced_keep=save
 forced_mark=0
 forced_time_load=now
 show_timestamps=1
+strftime=%d %b %Y %H:%M:%S
 history_length=0
 history_time=action
 history_unread=1

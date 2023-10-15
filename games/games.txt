@@ -1,5 +1,5 @@
 Here you can enter names that will be shown at the top instead of the game's AppID.
 (Editing this is no longer needed. Names are loaded automatically when possible.)
-(If editing, don't forget to leave an empty line at the end!)
 Format: AppID, then name, separated with an equals sign.
+
 000000=Example Game

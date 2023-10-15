@@ -45,6 +45,7 @@ else:
     appids = numeric
 
 done_apps = 1
+total_conv = 0
 errors = {}
 check_result = []
 for appid in appids:
@@ -75,6 +76,7 @@ for appid in appids:
             try:
                 img = Image.open(f'games/{appid}/achievement_images/{icon}')
                 img.save(f'games/{appid}/achievement_images/ico/{icon}.ico')
+                total_conv += 1
             except Exception as ex:
                 errors[appid] += 1
                 extra_text = f' - Error: {type(ex).__name__}'
@@ -85,6 +87,7 @@ for appid in appids:
     
     done_apps += 1
 
+print(f'Converted {total_conv} icons')
 for appid in errors:
     if errors[appid] > 0:
         print(f'{appid} - {errors[appid]} error(s)')

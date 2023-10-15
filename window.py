@@ -56,7 +56,7 @@ def send_notification(title, message, app_icon=None):
         'timeout': stg['notif_timeout']
     }
     if platform.uname().system == 'Windows':
-        if stg['notif_icons'] and app_icon != None and (not app_icon in ach_icons or ach_icons[app_icon.split('/')[-1]] != None):
+        if stg['notif_icons'] and app_icon != None and ach_icons[app_icon.split('/')[-1]] != None:
             try:
                 if os.path.isdir(f'games/{appid}'):
                     kwargs['app_icon'] = convert_ico(app_icon)
@@ -375,8 +375,9 @@ def draw_history():
         if hover_ach == i - scroll_history or (not stg['show_timestamps'] and history[i]['type'] != 'progress_report'):
             desc_max_lines = 3
 
-        can_show_desc = not history[i]['ach'].hidden or history[i]['type'] == 'unlock' or reveal_secrets
-        long_desc = history[i]['ach'].long_desc or (not can_show_desc and long_hidden_desc[history[i]['ach'].language])
+        if history[i]['type'] != 'lock_all':
+            can_show_desc = not history[i]['ach'].hidden or history[i]['type'] == 'unlock' or reveal_secrets
+            long_desc = history[i]['ach'].long_desc or (not can_show_desc and long_hidden_desc[history[i]['ach'].language])
 
         achbg_color = None
         if hover_ach == i - scroll_history and stg['color_achbg_hover'] != None:
@@ -398,7 +399,7 @@ def draw_history():
                     achbg_color = stg['color_achbg_rare_lock']
             if stg['color_achbg_lock'] != None and achbg_color == None:
                 achbg_color = stg['color_achbg_lock']
-        if achbg_color != None:
+        if history[i]['type'] != 'lock_all' and achbg_color != None:
             pygame.draw.rect(screen, achbg_color, pygame.Rect(10, header_h + (i - scroll_history) * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2))
         
         if history[i]['type'] == 'unlock':
@@ -431,7 +432,7 @@ def draw_history():
             pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
             screen.blit(lockallicon, (10, header_h + (i - scroll_history) * 74))
             show_text(screen, font_regular, 'All achievements locked', (84, header_h + (i - scroll_history) * 74), stg['color_text'])
-            show_text(screen, font_small, 'File containing achievement data was deleted', (84, header_h + 17 + (i - scroll_history) * 74)), stg['color_text']
+            show_text(screen, font_small, 'File containing achievement data was deleted', (84, header_h + 17 + (i - scroll_history) * 74), stg['color_text'])
             if stg['show_timestamps']:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'progress_report':
@@ -721,6 +722,8 @@ if achdata_source != 'steam':
                 achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
     except FileNotFoundError:
         pass
+    except Exception:
+        print('Failed to read file (player achs). Will retry on next check.')
 else:
     steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
     if steam_req != None:
@@ -728,6 +731,7 @@ else:
         achieved_json = convert_achs_format(achieved_json, achdata_source)
 
 stats = {}
+stats_crc32 = {}
 
 try:
     with open(os.path.join('games', appid, 'stats.txt')) as statslist:
@@ -739,9 +743,34 @@ try:
                 locinfo['source_extra'] = source_extra
                 if achdata_source == 'sse':
                     locinfo['crc32'] = zlib.crc32(bytes(linespl[0], 'utf-8'))
+                    stats_crc32[locinfo['crc32']] = linespl[0]
                 stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames)
 except FileNotFoundError:
     pass
+
+def load_stats():
+    m = 'rt'
+    if achdata_source == 'sse':
+        m = 'rb'
+    try:
+        with open(get_stats_path(achdata_source, appid, source_extra), m) as statsfile:
+            statsdata = statsfile.read()
+        statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
+    except FileNotFoundError:
+        statsdata = {}
+    except Exception:
+        print(f"Failed to read or process stats. Will retry on next check.")
+    stats_changed = False
+    for stat in stats:
+        if stat in statsdata:
+            if stats[stat].value != statsdata[stat]:
+                stats_changed = True
+            stats[stat].value = statsdata[stat]
+        else:
+            if stats[stat].value != stats[stat].default:
+                stats_changed = True
+            stats[stat].value = stats[stat].default
+    return stats_changed
 
 if achdata_source == 'steam' and len(stats) > 0:
     steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
@@ -749,6 +778,8 @@ if achdata_source == 'steam' and len(stats) > 0:
         for s in steam_req['playerstats']['stats']:
             if s['name'] in stats.keys():
                 stats[s['name']].value = s['value']
+elif achdata_source != 'goldberg' and len(stats) > 0:
+    load_stats()
 
 achs = []
 for ach in achs_json:
@@ -1044,7 +1075,7 @@ while running:
                             history.insert(0, {'type': 'lock_all', 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
                             if stg['notif']:
                                 if notifications_sent < stg['notif_limit'] or stg['notif_limit'] == 0:
-                                    send_notification('All achievements locked', 'Achievement data not found', 'images/lock_all.png')
+                                    send_notification('All achievements locked', 'Achievement data not found')
                                     notifications_sent += 1
                                 else:
                                     notifications_hidden += 1
@@ -1065,9 +1096,12 @@ while running:
             if achdata_source != 'steam':
                 stats_delay_counter = 0
                 stats_changed = False
-                for stat in stats.values():
-                    if stat.update_val():
-                        stats_changed = True
+                if achdata_source == 'goldberg':
+                    for stat in stats.values():
+                        if stat.update_val():
+                            stats_changed = True
+                else:
+                    stats_changed = load_stats()
             elif stats_changed:
                 for s in stat_response['playerstats']['stats']:
                     if s['name'] in stats.keys():
@@ -1092,10 +1126,10 @@ while running:
                                 force_unlocks[ach.name] = ach.earned_time
                                 fu_change = True
                                 achs_unlocked += 1
-                                time_real = datetime.now().strftime('%d %b %Y %H:%M:%S')
+                                time_real = datetime.now().strftime(stg['strftime'])
                                 if achdata_source != 'steam':
                                     time_action = datetime.fromtimestamp(stats[ach.progress.value['operand1']].fchecker.last_check)
-                                    time_action = time_action.strftime('%d %b %Y %H:%M:%S')
+                                    time_action = time_action.strftime(stg['strftime'])
                                 else:
                                     time_action = time_real
                                 if stg['forced_mark']:
@@ -1123,10 +1157,10 @@ while running:
                                     ts_change = True
                                 achs_unlocked -= 1
                                 if stg['notif_lock']:
-                                    time_real = datetime.now().strftime('%d %b %Y %H:%M:%S')
+                                    time_real = datetime.now().strftime(stg['strftime'])
                                     if achdata_source != 'steam':
                                         time_action = datetime.fromtimestamp(stats[ach.progress.value['operand1']].fchecker.last_check)
-                                        time_action = time_action.strftime('%d %b %Y %H:%M:%S')
+                                        time_action = time_action.strftime(stg['strftime'])
                                     else:
                                         time_action = time_real
                                     if stg['forced_mark']:
@@ -1214,8 +1248,8 @@ while running:
                 if achdata_source == 'codex':
                     c = {False: ' (Documents)', True: ' (AppData)'}
                     c = c[source_extra]
-                print(f'\n - Tracking: {achdata_source} / {appid} / {source_extra}{c}')
-                print(' - Version: almost v1.3.0')
+                print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{c}')
+                print(' - Version: v1.3.0')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

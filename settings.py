@@ -10,7 +10,7 @@ def get_game_name(appid):
         namelist = namelist.split('\n')
         for namepair in namelist:
             namepair = namepair.split('=')
-            if namepair[0] == str(appid):
+            if namepair[0] == appid:
                 return '='.join(namepair[1:])
         return appid
     except FileNotFoundError:
@@ -26,9 +26,9 @@ def check_alias(alias, default=None):
         aliaslist = aliaslist.split('\n')
         for entry in aliaslist:
             entry = entry.split('=')
-            if len(entry) != 2:
+            if len(entry) < 2:
                 continue
-            if entry[1] == alias:
+            if '='.join(entry[1:]) == alias:
                 return entry[0]
         return default
     except FileNotFoundError:
@@ -74,6 +74,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'forced_mark': {'type': 'bool', 'default': False},
                   'forced_time_load': {'type': 'choice', 'allowed': ['now', 'filechange'], 'default': 'now'},
                   'show_timestamps': {'type': 'bool', 'default': True},
+                  'strftime': {'type': 'str', 'default': '%d %b %Y %H:%M:%S'},
                   'history_length': {'type': 'int&-1', 'default': 0},
                   'history_time': {'type': 'choice', 'allowed': ['real', 'action'], 'default': 'action'},
                   'history_unread': {'type': 'bool', 'default': True},

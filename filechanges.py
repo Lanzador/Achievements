@@ -71,6 +71,9 @@ def get_stats_path(source, appid, extra=None):
             return os.path.join(os.environ['APPDATA'], 'SmartSteamEmu', extra, appid, 'stats.bin')
         else:
             return os.path.join(extra[5:], appid, 'stats.bin')
+    else:
+        print('Unable to determine location of player stats')
+        sys.exit()
 
 def get_save_dir(appid, source, extra):
     d = 'save/' + source
@@ -154,36 +157,10 @@ class FileChecker:
                                 print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
                                 self.last_check = 'Retry'
                                 return False, None
-                    elif self.source == 'codex':
+                    elif self.source in ('codex', 'ali213'):
                         with open(self.path) as changed_file:
                             try:
-                                for l in changed_file.read().split('\n'):
-                                    spl = l.split('=')
-                                    if len(spl) == 2 and spl[0] == self.locinfo['name']:
-                                        if self.locinfo['type'] == 'int':
-                                            newdata = int(spl[1])
-                                            break
-                                        elif self.locinfo['type'] == 'float':
-                                            newdata = float(spl[1])
-                                            break
-                            except Exception:
-                                print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
-                                self.last_check = 'Retry'
-                                return False, None
-                    elif self.source == 'ali213':
-                        with open(self.path) as changed_file:
-                            try:
-                                reading_correct_stat = None
-                                for l in changed_file.read().split('\n'):
-                                    if len(l) > 0 and l[0] == '[' and l[-1] == ']':
-                                        reading_correct_stat = l[1:-1] == self.locinfo['name']
-                                    elif reading_correct_stat and len(l.split('=')) > 1:
-                                        spl = l.split('=')
-                                        if self.locinfo['type'] == 'int' and spl[0] == 'int32':
-                                            newdata = int(spl[1])
-                                        elif self.locinfo['type'] == 'float' and spl[0] in ('float', 'float32'):
-                                            # I don't have an example with floats I could use with ALi213, so I have to guess what word it uses.
-                                            newdata = float(spl[1])
+                                newdata = changed_file.read()
                             except Exception:
                                 print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
                                 self.last_check = 'Retry'
@@ -191,14 +168,7 @@ class FileChecker:
                     elif self.source == 'sse':
                         with open(self.path, 'rb') as changed_file:
                             try:
-                                sse_data = changed_file.read()
-                                for i in range(struct.unpack('i', sse_data[:4])[0]):
-                                    e = sse_data[4 + 24 * i : 28 + 24 * i]
-                                    if struct.unpack('I', e[0:4])[0] == self.locinfo['crc32']:
-                                        if self.locinfo['type'] == 'int':
-                                            newdata = struct.unpack('i', e[20:24])[0]
-                                        elif self.locinfo['type'] == 'float':
-                                            newdata = struct.unpack('f', e[20:24])[0]
+                                newdata = changed_file.read()
                             except Exception:
                                 print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
                                 self.last_check = 'Retry'
