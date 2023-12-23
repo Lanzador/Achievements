@@ -181,7 +181,7 @@ def filter_achs(achs, state, stg):
                 continue
  
         if stg['unlocks_on_top'] and ach.earned:
-            achs_f.insert(first_lock - 1, ach)
+            achs_f.insert(first_lock, ach)
             first_lock += 1
             continue
         

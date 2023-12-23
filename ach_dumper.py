@@ -41,7 +41,11 @@ def send_steam_request(name, link):
         print(f'Connection error ({name})')
     return None
 
-args_count = len(sys.argv) - int('-u' in sys.argv) - int('-l' in sys.argv) - int('-h' in sys.argv) - int('-sn' in sys.argv) - int('-sh' in sys.argv) - int ('-sb' in sys.argv) - int('-s' in sys.argv)
+known_args = ['-u', '-l', '-h', '-sn', '-sh', '-sb', '-s', '-r', '-uot', '-t']
+args_count = len(sys.argv)
+for a in known_args:
+    args_count -= int(a in sys.argv)
+
 appid, achdata_source, source_extra = (None, None, None)
 if args_count > 1:
     appid = check_alias(sys.argv[1])
@@ -73,7 +77,12 @@ if args_count > 1:
     elif achdata_source == None:
         achdata_source = 'goldberg'
 else:
-    inp = input('Enter AppID: ')
+    inp = input('Enter AppID: ').split()
+    for i in inp.copy():
+        if i in known_args:
+            sys.argv.append(i)
+            inp.remove(i)
+    inp = ' '.join(inp)
     appid = check_alias(inp)
     if len(appid.split()) > 1:
         if appid == inp:
@@ -110,6 +119,7 @@ values = {}
 timestamps = {}
 forced = {}
 dnames = {}
+percentages = {}
 
 path_achs = f'games/{appid}/achievements.json'
 path_stats = f'games/{appid}/stats.txt'
@@ -119,6 +129,7 @@ if achdata_source != 'steam':
 path_force = os.path.join(save_dir, f'{appid}_force.json')
 path_time = os.path.join(save_dir, f'{appid}_time.json')
 path_dnames = f'games/{appid}/statdisplay.json'
+path_percentages = f'games/{appid}/unlockrates.json'
 
 url_random = randint(0, 10000000)
 
@@ -149,6 +160,11 @@ if os.path.isfile(path_time):
 if os.path.isfile(path_force):
     with open(path_force) as f:
         forced = json.load(f)
+
+if os.path.isfile(path_percentages):
+    with open(path_percentages) as f:
+        percentages = json.load(f)
+        percentages = percentages['achievements']
 
 if achdata_source == 'goldberg':
     if os.path.isfile(path_unlocks):
@@ -210,7 +226,7 @@ def only_float_for_decimals(v):
     return(float(v))
 
 class Achievement():
-    def __init__(self, a, u, s, t):
+    def __init__(self, a, u, s, t, p):
         self.name = a['name']
         self.display_name = a['displayName']
         self.description = a['description']
@@ -247,27 +263,39 @@ class Achievement():
             ap = a['progress']
             self.progress_f = ap['value']
             self.progress_1 = only_float_for_decimals(ap['max_val'])
-            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and ap['value']['operand1'] in s:
+            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and ap['value']['operand1'] in s and s[ap['value']['operand1']].type in ('int', 'float'):
                 self.progress_0 = s[ap['value']['operand1']].to_stat_type(ap['min_val'])
                 self.progress_1 = s[ap['value']['operand1']].to_stat_type(ap['max_val'])
-                if s[ap['value']['operand1']].type in ('int', 'float'):
-                    self.progress_v = s[ap['value']['operand1']].value
-                    self.progress_v = min(self.progress_v, self.progress_1)
-                    if not stg['bar_ignore_min']:
-                        self.progress_v = max(self.progress_v, self.progress_0)
+                self.progress_v = s[ap['value']['operand1']].value
+                self.progress_v = min(self.progress_v, self.progress_1)
+                if not stg['bar_ignore_min']:
+                    self.progress_v = max(self.progress_v, self.progress_0)
             else:
                 self.progress_v = 'Error'
+            # self.progress_v = only_float_for_decimals(self.progress_v)
+            # self.progress_1 = only_float_for_decimals(self.progress_1)
             if self.unlock:
                 self.progress_v = self.progress_1
 
+        self.rarity = -1.0
+        self.rarity_text = ''
+        if self.name in p:
+            self.rarity = round(p[self.name] * 10) / 10
+            self.rarity_text = str(self.rarity)
+            if not '.' in self.rarity_text:
+                self.rarity_text += '.0'
+            self.rarity_text = f' ({self.rarity_text}%)'
+            if stg['unlockrates'] == 'name':
+                self.display_name += self.rarity_text
+            elif stg['unlockrates'] == 'desc':
+                self.description += self.rarity_text
 achs_obj = []
 unlock_count = 0
 for a in achs:
-    o = Achievement(a, unlocks, stats, timestamps)
+    o = Achievement(a, unlocks, stats, timestamps, percentages)
     achs_obj.append(o)
     if o.unlock:
         unlock_count += 1
-    # print(f'{o.name} - {o.unlock} - {o.time} - {o.progress_v}')
 
 secrets = stg['secrets']
 if '-sn' in sys.argv:
@@ -283,6 +311,21 @@ elif '-l' in sys.argv:
     filt = False
 hide_descs = '-h' in sys.argv
 stats_only = '-s' in sys.argv
+rarity_sort = '-r' in sys.argv
+unlocks_on_top = '-uot' in sys.argv
+timesort = '-t' in sys.argv
+
+if rarity_sort:
+    achs_obj.sort(key=lambda a : a.rarity, reverse=True)
+if unlocks_on_top:
+    achs_obj.sort(key=lambda a : a.unlock, reverse=True)
+if timesort:
+    if filt == True:
+        achs_obj.sort(key=lambda a : a.time, reverse=True)
+    elif filt == None and unlocks_on_top:
+        unlocked_slice = achs_obj[:unlock_count]
+        unlocked_slice.sort(key=lambda a : a.time, reverse=True)
+        achs_obj = unlocked_slice + achs_obj[unlock_count:]
 
 gamename = get_game_name(appid)
 
@@ -295,6 +338,12 @@ if filt == True:
     text += ' (Unlocked only)'
 elif filt == False:
     text += ' (Locked only)'
+if rarity_sort:
+    text += ' [%↓]'
+if unlocks_on_top:
+    text += ' [U↑]'
+if timesort:
+    text += ' [T↓]'
 
 if stats_only and len(stats) > 0:
     text += '\n'
@@ -346,10 +395,10 @@ elif secrets == 'hide' and secrets_hidden > 0 and filt != True:
     else:
         text += f'\n\nThere are {secrets_hidden} more hidden achievements'
 
-if not os.path.isdir('text_dump'):
-    os.makedirs('text_dump')
+if not os.path.isdir('ach_dumper'):
+    os.makedirs('ach_dumper')
 
-filename = f"text_dump/{date.strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}"
+filename = f"ach_dumper/{date.strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}"
 if stats_only:
     filename += '_stats'
 elif filt == True:

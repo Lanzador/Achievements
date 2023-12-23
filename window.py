@@ -15,9 +15,7 @@ from stats import *
 from filechanges import *
 from settings import *
 
-if platform.uname().system == 'Windows':
-    from plyer import notification
-elif platform.uname().system == 'Linux':
+if platform.uname().system == 'Linux':
     from gi import require_version
     require_version('Notify', '0.7')
     from gi.repository import Notify
@@ -27,7 +25,6 @@ elif platform.uname().system == 'Linux':
     @register_exit
     def goodbye():
         Notify.uninit()
-        print('\nshutting down...')
 else:
     from plyer import notification
 
@@ -80,8 +77,8 @@ def send_notification(title, message, app_icon=None):
         return notification.notify(**kwargs)
 
 def send_steam_request(name, link):
-    if not name in ('appdetails', 'GetGlobalAchievementPercentagesForApp', 'GetSchemaForGame'):
-        global url_random
+    global url_random
+    if name in ('GetPlayerAchievements', 'GetUserStatsForGame'):
         url_random += 1
         link += f'&__random?={url_random}'
     try:
@@ -106,6 +103,8 @@ def send_steam_request(name, link):
             print(f'Got status code {r.status_code} ({name})')
     except requests.exceptions.ConnectionError:
         print(f'Connection error ({name})')
+    except Exception as ex:
+        print(f'Unhandled request error: {type(ex).__name__} ({name})')
     return None
         
 def draw_progressbar(x, y, w, h, p1, p2):
@@ -137,8 +136,8 @@ def draw_game_progress(max_name_length):
         t = f'Search: {search_request}'
     if (stg['gamebar_position'] != 'repname' or header_extra[:6] == 'search') and max_name_length > 0:
         ty = 10
-        if stg['gamebar_position'] in ('under', 'hide') and stg['font_size_regular'] <= 22:
-            ty += round((22 - stg['font_size_regular']) / 2)
+        if stg['gamebar_position'] in ('under', 'hide') and stg['font_size_general'] <= 22:
+            ty += round((22 - stg['font_size_general']) / 2)
         long_text(screen, max_name_length, font_general, t, (10, ty), stg['color_text'])
     if stg['gamebar_position'] == 'hide':
         return
@@ -185,8 +184,8 @@ def draw_achs():
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
         else:
             if stg['history_length'] != -1:
-                screen.blit(historybutton, (stg['window_size_x'] - 264, 10))
                 draw_game_progress(stg['window_size_x'] - 284)
+                screen.blit(historybutton, (stg['window_size_x'] - 264, 10))
             else:
                 draw_game_progress(stg['window_size_x'] - 184)
             if len(history) > 0 and history[0]['unread'] == 1:
@@ -210,7 +209,7 @@ def draw_achs():
             bar_length = stg['bar_length']
 
             can_show_desc = not achs_f[i].hidden or achs_f[i].earned or reveal_secrets
-            long_desc = achs_f[i].long_desc or (not can_show_desc and long_hidden_desc[achs_f[i].language])
+            long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
 
             if achs_f[i].progress != None:
                 bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
@@ -221,14 +220,17 @@ def draw_achs():
             else:
                 bar_shown = False
 
+            hovered_over = hover_ach == i - scroll
+            hide_bar_and_time = hovered_over and long_desc
+
             desc_max_lines = 3
             if bar_shown or (achs_f[i].earned and stg['show_timestamps']):
                 desc_max_lines = 2
-            if hover_ach == i - scroll:
+            if hovered_over:
                 desc_max_lines = 3
 
             achbg_color = None
-            if hover_ach == i - scroll and stg['color_achbg_hover'] != None:
+            if hovered_over and stg['color_achbg_hover'] != None:
                 achbg_color = stg['color_achbg_hover']
             elif achs_f[i].earned:
                 if stg['color_achbg_rare'] != None and achbg_color == None and achs_f[i].rare:
@@ -258,7 +260,7 @@ def draw_achs():
                 long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), stg['color_text_unlock'])
                 if achs_f[i].has_desc:
                     multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_unlock'])
-                if hover_ach != i - scroll or not long_desc:
+                if not hide_bar_and_time:
                     if bar_shown:
                         if achs_f[i].progress.support:
                             if not (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
@@ -302,7 +304,7 @@ def draw_achs():
                 elif achs_f[i].has_desc:
                     multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_lock'])
 
-            if achs_f[i].progress != None and (hover_ach != i - scroll or not long_desc) and bar_shown:
+            if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
                 if achs_f[i].progress.support:
                     if not stg['bar_ignore_min']:
                         without_min = achs_f[i].progress.get_without_min()
@@ -371,16 +373,18 @@ def draw_history():
         font_regular = font_achs_regular[l]
         font_small = font_achs_small[l]
 
-        desc_max_lines = 2
-        if hover_ach == i - scroll_history or (not stg['show_timestamps'] and history[i]['type'] != 'progress_report'):
-            desc_max_lines = 3
-
+        hovered_over = hover_ach == i - scroll_history
         if history[i]['type'] != 'lock_all':
             can_show_desc = not history[i]['ach'].hidden or history[i]['type'] == 'unlock' or reveal_secrets
-            long_desc = history[i]['ach'].long_desc or (not can_show_desc and long_hidden_desc[history[i]['ach'].language])
+            long_desc = (can_show_desc and history[i]['ach'].long_desc) or (not can_show_desc and long_hidden_desc[history[i]['ach'].language])
+            hide_bar_and_time = hovered_over and long_desc
+
+        desc_max_lines = 2
+        if hovered_over or (not stg['show_timestamps'] and history[i]['type'] != 'progress_report'):
+            desc_max_lines = 3
 
         achbg_color = None
-        if hover_ach == i - scroll_history and stg['color_achbg_hover'] != None:
+        if hovered_over and stg['color_achbg_hover'] != None:
             achbg_color = stg['color_achbg_hover']
 
         if history[i]['type'] == 'unlock':
@@ -412,7 +416,7 @@ def draw_history():
             if history[i]['ach'].has_desc:
                 multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, history[i]['ach'].description_l,
                               (84, header_h + 17 + (i - scroll_history) * 74), stg['color_text_unlock'])
-            if stg['show_timestamps'] and hover_ach != i - scroll_history or not long_desc:
+            if stg['show_timestamps'] and not hide_bar_and_time:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'lock':
             pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
@@ -426,7 +430,7 @@ def draw_history():
             elif history[i]['ach'].has_desc:
                 multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, history[i]['ach'].description_l,
                               (84, header_h + 17 + (i - scroll_history) * 74), stg['color_text_lock'])
-            if stg['show_timestamps'] and hover_ach != i - scroll_history or not long_desc:
+            if stg['show_timestamps'] and not hide_bar_and_time:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'lock_all':
             pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
@@ -453,8 +457,7 @@ def draw_history():
                 multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, history[i]['ach'].description_l,
                               (84, header_h + 17 + (i - scroll_history) * 74), stg['color_text_lock'])
 
-            if hover_ach != i - scroll_history or not long_desc:
-                # without_min = history[i]['ach'].progress.get_without_min()
+            if not hide_bar_and_time:
                 draw_progressbar(84, header_h + 51 + (i - scroll_history) * 74, stg['bar_length'], 13, history[i]['value'][0], history[i]['value'][1])
                 show_text(screen, font_general, progress_str, (stg['bar_length'] + 94, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
                 if stg['show_timestamps']:
@@ -1116,9 +1119,6 @@ while running:
                         ach.progress.calculate(stats)
 
                         if stg['bar_force_unlock']:
-                            # actual_value = ach.progress.current_value
-                            # if stg['bar_ignore_min'] or ach.progress.min_val == ach.progress.max_val:
-                                # actual_value = ach.progress.real_value
                             if ach.progress.real_value >= ach.progress.max_val and not ach.earned:
                                 ach.earned = True
                                 ts_change = max(ts_change, ach.update_time(stats[ach.progress.value['operand1']].fchecker.last_check))
@@ -1201,7 +1201,14 @@ while running:
 
         elif event.type == pygame.KEYDOWN:
             if header_extra == 'search':
-                if event.key == pygame.K_BACKSPACE:
+                if event.key == pygame.K_RETURN:
+                    scroll_achs_copy = scroll
+                    state_filter_copy = state_filter
+                    scroll = 0
+                    state_filter = 0
+                    header_extra = 'search_results'
+                    filter_needed = True
+                elif event.key == pygame.K_BACKSPACE:
                     search_request = search_request[:-1]
                 else:
                     search_request += event.unicode
@@ -1292,12 +1299,12 @@ while running:
                                 scroll = i
                                 break
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
-                        filter_needed = True
                         scroll_achs_copy = scroll
                         state_filter_copy = state_filter
                         scroll = 0
                         state_filter = 0
                         header_extra = 'search_results'
+                        filter_needed = True
                 elif header_extra == 'search_results':
                     if pygame.Rect(stg['window_size_x'] - 118, 10, 76, 22).collidepoint(event.pos):
                         state_filter += 1
@@ -1442,7 +1449,7 @@ while running:
                         print(t)
                     except Exception as ex2:
                         print(f'\nError when printing achievement info: {type(ex2).__name__}')
-                # I commented this out because it kills pyw
+                # Ctrl+Click to see name/desc in language from input():
                 # if not isinstance(a.display_name, str) and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     # l = input('Choose a language: ')
                     # if l in a.display_name:
@@ -1533,7 +1540,7 @@ while running:
         if scroll_history < 0:
             scroll_history = 0
 
-    while stg['history_length'] != 0 and len(history) > stg['history_length'] and len(history) > 0:
+    while stg['history_length'] != 0 and len(history) > 0 and len(history) > stg['history_length']:
         history.pop(-1)
 
     if flip_required:

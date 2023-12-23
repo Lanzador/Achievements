@@ -7,10 +7,12 @@ from PIL import Image
 silent = '-s' in sys.argv
 check = '-c' in sys.argv
 
-if len(sys.argv) - int(silent) - int(check) > 1:
+if len(set(sys.argv)) - int(silent) - int(check) > 1:
     appids = set(sys.argv[1:])
 else:
     appids = set(input('Enter AppID(s): ').split())
+    silent = max(silent, '-s' in appids)
+    check = max(check, '-c' in appids)
 
 t = time.time()
 
