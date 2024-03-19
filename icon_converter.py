@@ -32,8 +32,8 @@ else:
         pass
 
     for l in alias:
-        spl = l.split('=')
-        if len(spl) == 2 and spl[1] in appids:
+        spl = l.split('=', 1)
+        if len(spl) > 1 and spl[1] in appids:
             appids.discard(spl[1])
             appids.add(spl[0].split()[0])
 

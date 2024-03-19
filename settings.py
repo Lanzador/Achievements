@@ -1,4 +1,5 @@
 import os
+import zlib
 
 def get_game_name(appid):
     try:
@@ -9,9 +10,9 @@ def get_game_name(appid):
                 gamestxt.write('\n')
         namelist = namelist.split('\n')
         for namepair in namelist:
-            namepair = namepair.split('=')
-            if namepair[0] == appid:
-                return '='.join(namepair[1:])
+            namepair = namepair.split('=', 1)
+            if len(namepair) > 1 and namepair[0] == appid:
+                return namepair[1]
         return appid
     except FileNotFoundError:
         return appid
@@ -25,10 +26,8 @@ def check_alias(alias, default=None):
             aliaslist = aliaslistf.read()
         aliaslist = aliaslist.split('\n')
         for entry in aliaslist:
-            entry = entry.split('=')
-            if len(entry) < 2:
-                continue
-            if '='.join(entry[1:]) == alias:
+            entry = entry.split('=', 1)
+            if len(entry) > 1 and entry[1] == alias:
                 return entry[0]
         return default
     except FileNotFoundError:
@@ -44,6 +43,24 @@ def source_name(source):
         if source in s:
             return known_values[s]
     return None
+
+def get_save_dir(appid, source, extra):
+    d = 'save/' + source
+    if source == 'codex' and extra == True:
+        d += '/appdata'
+    elif source in ('ali213', 'sse'):
+        if extra == None:
+            if source == 'ali213':
+                d += '/Player'
+        elif (not extra[:5] == 'path:'):
+            d += f'/{extra}'
+        else:
+            path = os.path.abspath(extra[5:]).lower().replace('\\', '/')
+            path_crc = zlib.crc32(bytes(path, 'utf-8'))
+            d += f'/path/{appid}_{path_crc}'
+    elif source == 'steam':
+        d += f'/{extra}'
+    return d
 
 known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'window_size_y': {'type': 'int', 'default': 600},
@@ -69,7 +86,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'bar_hide_unsupported': {'type': 'choice', 'allowed': ['none', 'stat', 'all'], 'default': 'none'},
                   'bar_hide_secret': {'type': 'bool', 'default': True},
                   'bar_ignore_min': {'type': 'bool', 'default': False},
-                  'bar_force_unlock': {'type': 'bool', 'default': False},
+                  'bar_force_unlock': {'type': 'bool', 'default': True},
                   'forced_keep': {'type': 'choice', 'allowed': ['no', 'session', 'save'], 'default': 'save'},
                   'forced_mark': {'type': 'bool', 'default': False},
                   'forced_time_load': {'type': 'choice', 'allowed': ['now', 'filechange'], 'default': 'now'},
@@ -133,12 +150,12 @@ def load_settings_file(settings, filename):
             stgtext = stgfile.read()
         stgtext = stgtext.split('\n')
         for sett in stgtext:
-            sett = sett.split('=')
+            sett = sett.split('=', 1)
             if len(sett) > 1 and sett[0] in known_settings:
                 if (known_settings[sett[0]]['default'] == None or 'cbn' in known_settings[sett[0]]) and sett[1] == '':
                     settings[sett[0]] = None
                 elif known_settings[sett[0]]['type'] == 'str':
-                    settings[sett[0]] = '='.join(sett[1:])
+                    settings[sett[0]] = sett[1]
                 elif known_settings[sett[0]]['type'] == 'int' and sett[1].isnumeric():
                     settings[sett[0]] = int(sett[1])
                 elif known_settings[sett[0]]['type'] == 'int&-1' and (sett[1].isnumeric() or sett[1] == '-1'):
@@ -224,6 +241,6 @@ if __name__ == '__main__':
         else:
             s += str(known_settings[n]['default'])
         s += '\n'
-    s = s[:len(s) - 1]
-    with open('settings/settings_default.txt', 'w') as def_file:
+    s = s[:-1]
+    with open('settings/settings_default.txt', 'w', encoding='utf-8') as def_file:
         def_file.write(s)

@@ -15,8 +15,8 @@ except FileNotFoundError:
     pass
 
 for l in alias:
-    spl = l.split('=')
-    if len(spl) == 2 and spl[1] == appid:
+    spl = l.split('=', 1)
+    if len(spl) > 1 and spl[1] == appid:
         appid = spl[0].split()[0]
 
 if os.path.isdir(os.path.join(os.environ['APPDATA'], 'Goldberg SteamEmu Saves', appid)):

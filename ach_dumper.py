@@ -7,8 +7,8 @@ import requests
 from datetime import datetime
 from random import randint
 
-from settings import check_alias, source_name, known_settings, load_settings, get_game_name
-from filechanges import get_player_achs_path, get_stats_path, get_save_dir
+from settings import get_game_name, check_alias, source_name, load_settings, get_save_dir
+from filechanges import get_player_achs_path, get_stats_path
 from achievements import convert_achs_format
 from stats import Stat, convert_stats_format
 
@@ -57,7 +57,7 @@ if args_count > 1:
             if achdata_source == 'codex':
                 source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
             elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
-                source_extra = ' '.join(appid.split()[2:])
+                source_extra = ' '.join(appid.split(' ')[2:])
             elif achdata_source == 'steam' and len(appid.split()) > 2:
                 source_extra = appid.split()[2]
             elif achdata_source == None:
@@ -77,7 +77,7 @@ if args_count > 1:
     elif achdata_source == None:
         achdata_source = 'goldberg'
 else:
-    inp = input('Enter AppID: ').split()
+    inp = input('Enter AppID: ').split(' ')
     for i in inp.copy():
         if i in known_args:
             sys.argv.append(i)
@@ -86,12 +86,12 @@ else:
     appid = check_alias(inp)
     if len(appid.split()) > 1:
         if appid == inp:
-            appid = check_alias(appid.split()[0]).split()[0] + ' ' + ' '.join(appid.split()[1:])
+            appid = check_alias(appid.split()[0]).split()[0] + ' ' + ' '.join(appid.split(' ')[1:])
         achdata_source = source_name(appid.split()[1])
         if achdata_source == 'codex':
             source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
         elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
-            source_extra = ' '.join(appid.split()[2:])
+            source_extra = ' '.join(appid.split(' ')[2:])
         elif achdata_source == 'steam' and len(appid.split()) > 2:
             source_extra = appid.split()[2]
         elif achdata_source == None:
@@ -126,8 +126,8 @@ path_stats = f'games/{appid}/stats.txt'
 if achdata_source != 'steam':
     path_unlocks = get_player_achs_path(achdata_source, appid, source_extra)
     path_values = get_stats_path(achdata_source, appid, source_extra)
-path_force = os.path.join(save_dir, f'{appid}_force.json')
-path_time = os.path.join(save_dir, f'{appid}_time.json')
+path_force = f'{save_dir}/{appid}_force.json'
+path_time = f'{save_dir}/{appid}_time.json'
 path_dnames = f'games/{appid}/statdisplay.json'
 path_percentages = f'games/{appid}/unlockrates.json'
 
@@ -137,7 +137,7 @@ if os.path.isfile(path_achs):
     with open(path_achs) as f:
         achs = json.load(f)
 
-if os.path.isfile(path_dnames):
+if stg['stat_display_names'] and os.path.isfile(path_dnames):
     with open(path_dnames) as f:
         dnames = json.load(f)
 if os.path.isfile(path_stats):
@@ -324,6 +324,7 @@ if timesort:
         achs_obj.sort(key=lambda a : a.time, reverse=True)
     elif filt == None and unlocks_on_top:
         unlocked_slice = achs_obj[:unlock_count]
+        unlocked_slice.reverse()
         unlocked_slice.sort(key=lambda a : a.time, reverse=True)
         achs_obj = unlocked_slice + achs_obj[unlock_count:]
 

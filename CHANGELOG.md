@@ -1,3 +1,74 @@
+## v1.3.0
+
+### This commit
+- Fix `forced_time_load=filechange`.
+- When sorting by unlock time and multiple achievements have the same timestamp, show them in reverse order.
+- Added some `try-except`s to minimize crashes.
+- Print error type for various errors.
+- Use the same save folder even if `path:` is written with a slight difference (for example, letter case or type of slash). Move `path:` saves from `save/[Emulator]/path_[AppID]_[PathHash]` to `save/[Emulator]/path/[AppID]_[PathHash]`. Old `path:` saves have to be moved (and the path hashes have changed).
+- Don't include an icon in the system notification if that icon failed to load in the achievement list (broken icons exist).
+- Fix crash if failed to load stats.
+- Always save `path.txt` when using `path:` if the save folder exists (rather than only if the files changed when the program was launched).
+- Some minor changes and fixes to updating achievement status when the emulator's save is changed.
+- Include path hash in `~` info.
+- The first change to `showtext.py` in nearly 10 months: multiple spaces in a row are no longer replaced by one when using `long_text` or `multiline_text`.
+- Create `games` folder automatically instead of refusing to run if it doesn't exist (that behavior was added in `2e85e85`).
+- Changed the default value of `bar_force_unlock` to `true`.
+- Fixed the "Hidden achievements" line not appearing in search results if a `#keyword` is used.
+- [icon_converter, save_finder] Allow `=` in alias.
+- [ach_dumper] Only load stat display names if they're enabled in settings.
+- [save_finder_all] Don't save list of app names received from Steam (was used for testing and not removed later).
+
+### Commit 670e6cc
+- Another sorting fix.
+- Handle unknown request errors.
+- Fixed using `font_size_regular` instead of `font_size_general` for game name, causing a crash. Extra proof of the settings names being weird.
+- Press `Enter` to show search results.
+- [ach_dumper] -args can be given in the `Enter AppID:` input.
+- [ach_dumper] Unlock rates, if enabled in `settings.txt`. Relies on percentages downloaded by the main program.
+- [ach_dumper] Sorting (`-r`, `-uot`, `-t`).
+- [ach_dumper] Changed folder name (`text_dump` -> `ach_dumper`).
+- Added `save_finder_all`: a script that finds all supported saves (except `path:` ones) and prints a list, including game names from Steam.
+
+### Commit 5db5f30
+- Added `strftime` setting to set a custom date/time format.
+- Fix sorting.
+- Allow `=` in alias.
+- Fix "All achievements locked" history notification crash. Remove icon from system notification of the same type.
+- Stats file is now loaded once (instead of once for every stat) for non-Goldberg emulators.
+- `~` info: changed order from `Emulator / AppID / Username` to `AppID / Emulator / Username`.
+- [icon_converter] Shows number of successfully converted icons.
+- Added `ach_dumper`: a script that writes the achievement list with your progress to a text file for easy sharing.
+
+### Commit 2e85e85
+- Better way of storing unlock rates. Also, generated `.json` files now have indents.
+- `hide_secrets` was replaced by `secrets` with a third behavior option (`bottom`).
+- It's now ok if `games.txt` doesn't end with an empty line.
+- Added `language_requests` (language used for Steam requests; if empty, uses the first language from `language` like before).
+- `color_bar_completed` can now be empty (to use same color as `color_bar_fill`). This is the default value now.
+- `color_hover` (which I forgot to mention in the readme) was replaced with `color_achbg_hover` (which can be empty). Other `color_achbg_` options were added.
+- Display names for stats.
+- Values for settings that accept a string can now contain `=`.
+- Additional settings files can now be loaded using `add_file=filename.txt`.
+- Search feature (press `Ctrl+F`).
+- In-app sorting/secrets settings (right-click the unlock status filter button). They don't modify `settings.txt` and only affect the current session. Right-click the secrets button to access a new "reveal secret achievements" button. Kept the unlock history screen even though the same sorting can easily be achieved with these buttons.
+- If `frame_size` is greater than 5, use 5.
+- Pressing the `~` key will print which game/emulator/user are being tracked and the program's version.
+- More info is printed when an achievement is clicked: progress stat, rarity (if `unlockrates=load`), unlock time (if `show_timestamps` is diabled).
+- Moved converted icons from `games/ico/[AppID]` to `games/[AppID]/achievement_images/ico`.
+- [icon_converter] Shows time taken.
+- [icon_converter] Added `-c` to check if icons are converted instead of converting them.
+- [icon_converter] Handle missing `alias.txt` and `achievements.json`.
+- [icon_converter] Show number of current app instead of amount of finished apps (`1/1` instead of `0/1`).
+- [icon_converter] If there's an error while converting an icon, print its type. Also print if an icon has already been converted.
+- Added `save_finder`: a script that finds supported saves for a given AppID. Supports alias.
+
+### Commit f781df9
+- Some changes and fixes to Linux notifications by @detiam. See his PR for more information.
+
+### Commit 4f52cda
+- [icon_converter] Fix alias.
+
 ## v1.2.1
 - Hide API names when clicking hidden achievements, unless holding `SHIFT`.
 - Don't load unused image; remove `savetime_shown=first` from emulator-specific settings; mention Steam user IDs in `alias.txt` template.

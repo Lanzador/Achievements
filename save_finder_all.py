@@ -65,8 +65,6 @@ scan_for_appids(p, 'SmartSteamEmu')
 app_names = {}
 try:
     app_list = requests.get('https://api.steampowered.com/ISteamApps/GetAppList/v2')
-    with open('LIST!!.txt', 'w', encoding='utf-8') as o:
-        o.write(app_list.text)
     if int(app_list.status_code / 100) != 4:
         app_list = app_list.json()['applist']['apps']
         for app in app_list:

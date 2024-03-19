@@ -10,7 +10,7 @@ def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_ret
 
     if ignore_chars == 0:
         check_str = ''
-        words = s.split()
+        words = s.split(' ')
         for word in words:
             prevlen = len(check_str)
             if prevlen > 0:
@@ -39,7 +39,7 @@ def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_ret
 
 def multiline_text(screen, max_lines, height_change, max_width, font, s, place, color=(255, 255, 255), only_return = False):
     lines = ['']
-    words = s.split()
+    words = s.split(' ')
     too_long = False
 
     for word in words:

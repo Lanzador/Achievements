@@ -62,7 +62,7 @@ def send_notification(title, message, app_icon=None):
         return notification.notify(**kwargs)
     elif platform.uname().system == 'Linux':
         Notify.set_app_name(gamename)
-        if app_icon != None and stg['notif_icons']:
+        if stg['notif_icons'] and app_icon != None and ach_icons[app_icon.split('/')[-1]] != None:
             linux_notification = Notify.Notification.new(title,message,os.path.abspath(app_icon))
         else:
             linux_notification = Notify.Notification.new(title,message)
@@ -72,15 +72,14 @@ def send_notification(title, message, app_icon=None):
             threading.Timer(stg['notif_timeout'], linux_notification.close).start()
         return linux_notification.show()
     else:
-        if app_icon != None and stg['notif_icons']:
+        if stg['notif_icons'] and app_icon != None and ach_icons[app_icon.split('/')[-1]] != None:
             kwargs['app_icon'] = app_icon
         return notification.notify(**kwargs)
 
 def send_steam_request(name, link):
     global url_random
-    if name in ('GetPlayerAchievements', 'GetUserStatsForGame'):
-        url_random += 1
-        link += f'&__random?={url_random}'
+    url_random += 1
+    link += f'&__random?={url_random}'
     try:
         r = requests.get(link)
         if int(r.status_code / 100) != 4:
@@ -202,129 +201,133 @@ def draw_achs():
         show_text(screen, font_general, 'No achievements found', (10, header_h), stg['color_text'])
 
     for i in range(scroll, scroll + achs_to_show + 1):
-        if i < len(achs_f):
-            font_regular = font_achs_regular[achs_f[i].language]
-            font_small = font_achs_small[achs_f[i].language]
+        if i >= len(achs_f):
+            continue
 
-            bar_length = stg['bar_length']
+        font_regular = font_achs_regular[achs_f[i].language]
+        font_small = font_achs_small[achs_f[i].language]
 
-            can_show_desc = not achs_f[i].hidden or achs_f[i].earned or reveal_secrets
-            long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
+        bar_length = stg['bar_length']
 
-            if achs_f[i].progress != None:
-                bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
-                bar_hidden_unsup = stg['bar_hide_unsupported'] == 'all' and not achs_f[i].progress.support
-                bar_hidden_unsup_st = stg['bar_hide_unsupported'] == 'stat' and not achs_f[i].progress.support_error in (None, "Unknown stat")
-                bar_hidden_secret = stg['bar_hide_secret'] and not can_show_desc
-                bar_shown = not (bar_hidden_unlock or bar_hidden_unsup or bar_hidden_unsup_st or bar_hidden_secret)
-            else:
-                bar_shown = False
+        can_show_desc = not achs_f[i].hidden or achs_f[i].earned or reveal_secrets
+        long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
 
-            hovered_over = hover_ach == i - scroll
-            hide_bar_and_time = hovered_over and long_desc
+        if achs_f[i].progress != None:
+            bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
+            bar_hidden_unsup = stg['bar_hide_unsupported'] == 'all' and not achs_f[i].progress.support
+            bar_hidden_unsup_st = stg['bar_hide_unsupported'] == 'stat' and not achs_f[i].progress.support_error in (None, "Unknown stat")
+            bar_hidden_secret = stg['bar_hide_secret'] and not can_show_desc
+            bar_shown = not (bar_hidden_unlock or bar_hidden_unsup or bar_hidden_unsup_st or bar_hidden_secret)
+        else:
+            bar_shown = False
 
+        hovered_over = hover_ach == i - scroll
+        hide_bar_and_time = hovered_over and long_desc
+
+        desc_max_lines = 3
+        if bar_shown or (achs_f[i].earned and stg['show_timestamps']):
+            desc_max_lines = 2
+        if hovered_over:
             desc_max_lines = 3
-            if bar_shown or (achs_f[i].earned and stg['show_timestamps']):
-                desc_max_lines = 2
-            if hovered_over:
-                desc_max_lines = 3
 
-            achbg_color = None
-            if hovered_over and stg['color_achbg_hover'] != None:
-                achbg_color = stg['color_achbg_hover']
-            elif achs_f[i].earned:
-                if stg['color_achbg_rare'] != None and achbg_color == None and achs_f[i].rare:
-                    achbg_color = stg['color_achbg_rare']
-                if achbg_color == None and stg['color_achbg_unlock'] != None:
-                    achbg_color = stg['color_achbg_unlock']
-            else:
-                if stg['color_achbg_rare_lock'] != None and achbg_color == None and achs_f[i].rare:
-                    achbg_color = stg['color_achbg_rare_lock']
-                if achbg_color == None and stg['color_achbg_lock'] != None:
-                    achbg_color = stg['color_achbg_lock']
-            if achbg_color != None:
-                pygame.draw.rect(screen, achbg_color, pygame.Rect(10, header_h + (i - scroll) * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2))
+        achbg_color = None
+        if hovered_over and stg['color_achbg_hover'] != None:
+            achbg_color = stg['color_achbg_hover']
+        elif achs_f[i].earned:
+            if stg['color_achbg_rare'] != None and achbg_color == None and achs_f[i].rare:
+                achbg_color = stg['color_achbg_rare']
+            if achbg_color == None and stg['color_achbg_unlock'] != None:
+                achbg_color = stg['color_achbg_unlock']
+        else:
+            if stg['color_achbg_rare_lock'] != None and achbg_color == None and achs_f[i].rare:
+                achbg_color = stg['color_achbg_rare_lock']
+            if achbg_color == None and stg['color_achbg_lock'] != None:
+                achbg_color = stg['color_achbg_lock']
+        if achbg_color != None:
+            pygame.draw.rect(screen, achbg_color, pygame.Rect(10, header_h + (i - scroll) * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2))
 
-            if achs_f[i].earned:
-                if stg['bar_unlocked'] == 'zerolen':
-                    bar_length = -10
+        if achs_f[i].earned:
+            if stg['bar_unlocked'] == 'zerolen':
+                bar_length = -10
 
+            if stg['frame_size'] > 0:
                 frame_color = stg['frame_color_unlock']
                 if achs_f[i].rare:
                     frame_color = stg['frame_color_rare']
                 pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-                if achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
-                    screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
-                else:
-                    pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
-                long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), stg['color_text_unlock'])
-                if achs_f[i].has_desc:
-                    multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_unlock'])
-                if not hide_bar_and_time:
-                    if bar_shown:
-                        if achs_f[i].progress.support:
-                            if not (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
-                                val = achs_f[i].progress.current_value
-                                if stg['bar_ignore_min']:
-                                    val = achs_f[i].progress.real_value
-                                prg_str_len = font_general.size(f'{round_down(val, 2)}/{achs_f[i].progress.max_val}')[0]
-                            else:
-                                prg_str_len = font_general.size(f'{round_down(achs_f[i].progress.max_val, 2)}/{achs_f[i].progress.max_val}')[0]
-                        else:
-                            prg_str_len = font_general.size(achs[i].progress.support_error)[0]
-                        if stg['show_timestamps']:
-                            show_text(screen, font_general, achs_f[i].get_time(stg),
-                                (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), stg['color_text'])
-                    else:
-                        if stg['show_timestamps']:
-                            show_text(screen, font_general, achs_f[i].get_time(stg),
-                                (84, header_h + 49 + (i - scroll) * 74), stg['color_text'])
-
-                # ach_time = achs_f[i].get_time()
-                # show_text(screen, font_regular, ach_time, (790 - font_regular.size(ach_time)[0] , 107 + (i - scroll) * 74))
-
-                # ach_time = achs_f[i].get_time()
-                # ach_time_len = font_regular.size(ach_time)
-                # rrect = pygame.Rect(0, 0, ach_time_len[0], ach_time_len[1])
-                # rrect.midright = (790, 90 + (i - scroll) * 74)
-                # show_text(screen, font_regular, ach_time, rrect)
-
+            if achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
+                screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
             else:
+                pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+            long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), stg['color_text_unlock'])
+            if achs_f[i].has_desc:
+                multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_unlock'])
+            if not hide_bar_and_time:
+                if bar_shown:
+                    if achs_f[i].progress.support:
+                        if not (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
+                            val = achs_f[i].progress.current_value
+                            if stg['bar_ignore_min']:
+                                val = achs_f[i].progress.real_value
+                            prg_str_len = font_general.size(f'{round_down(val, 2)}/{achs_f[i].progress.max_val}')[0]
+                        else:
+                            prg_str_len = font_general.size(f'{round_down(achs_f[i].progress.max_val, 2)}/{achs_f[i].progress.max_val}')[0]
+                    else:
+                        prg_str_len = font_general.size(achs[i].progress.support_error)[0]
+                    if stg['show_timestamps']:
+                        show_text(screen, font_general, achs_f[i].get_time(stg),
+                            (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+                else:
+                    if stg['show_timestamps']:
+                        show_text(screen, font_general, achs_f[i].get_time(stg),
+                            (84, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+
+            # ach_time = achs_f[i].get_time()
+            # show_text(screen, font_regular, ach_time, (790 - font_regular.size(ach_time)[0] , 107 + (i - scroll) * 74))
+
+            # ach_time = achs_f[i].get_time()
+            # ach_time_len = font_regular.size(ach_time)
+            # rrect = pygame.Rect(0, 0, ach_time_len[0], ach_time_len[1])
+            # rrect.midright = (790, 90 + (i - scroll) * 74)
+            # show_text(screen, font_regular, ach_time, rrect)
+
+        else:
+            if stg['frame_size'] > 0:
                 frame_color = stg['frame_color_lock']
                 if achs_f[i].rare:
                     frame_color = stg['frame_color_rare_lock']
                 pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-                if achs_f[i].icon_gray != None and ach_icons[achs_f[i].icon_gray] != None:
-                    screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
-                else:
-                    pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
-                long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), stg['color_text_lock'])
-                if not can_show_desc:
-                    multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), stg['color_text_lock'])
-                elif achs_f[i].has_desc:
-                    multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_lock'])
+            if achs_f[i].icon_gray != None and ach_icons[achs_f[i].icon_gray] != None:
+                screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
+            else:
+                pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+            long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), stg['color_text_lock'])
+            if not can_show_desc:
+                multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), stg['color_text_lock'])
+            elif achs_f[i].has_desc:
+                multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), stg['color_text_lock'])
 
-            if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
-                if achs_f[i].progress.support:
-                    if not stg['bar_ignore_min']:
-                        without_min = achs_f[i].progress.get_without_min()
-                    else:
-                        without_min = (achs_f[i].progress.real_value, achs_f[i].progress.max_val)
-                    if (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
-                        draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 1, 1)
-                        show_text(screen, font_general, f'{achs_f[i].progress.max_val}/{achs_f[i].progress.max_val}', (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
-                    else:
-                        draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, without_min[0], without_min[1])
-                        prg_val_to_show = round_down(achs_f[i].progress.current_value, 2)
-                        if stg['bar_ignore_min']:
-                            prg_val_to_show = round_down(achs_f[i].progress.real_value, 2)
-                        show_text(screen, font_general, f'{prg_val_to_show}/{achs_f[i].progress.max_val}', (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+        if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
+            if achs_f[i].progress.support:
+                if not stg['bar_ignore_min']:
+                    without_min = achs_f[i].progress.get_without_min()
                 else:
-                    if (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
-                        draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 1, 1)
-                    else:
-                        draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 0, 1)
-                    show_text(screen, font_general, achs_f[i].progress.support_error, (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+                    without_min = (achs_f[i].progress.real_value, achs_f[i].progress.max_val)
+                if (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
+                    draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 1, 1)
+                    show_text(screen, font_general, f'{achs_f[i].progress.max_val}/{achs_f[i].progress.max_val}', (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+                else:
+                    draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, without_min[0], without_min[1])
+                    prg_val_to_show = round_down(achs_f[i].progress.current_value, 2)
+                    if stg['bar_ignore_min']:
+                        prg_val_to_show = round_down(achs_f[i].progress.real_value, 2)
+                    show_text(screen, font_general, f'{prg_val_to_show}/{achs_f[i].progress.max_val}', (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
+            else:
+                if (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
+                    draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 1, 1)
+                else:
+                    draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, 0, 1)
+                show_text(screen, font_general, achs_f[i].progress.support_error, (bar_length + 94, header_h + 49 + (i - scroll) * 74), stg['color_text'])
 
     if len(achs_f) > achs_to_show:
         draw_scrollbar(scroll, len(achs_f) - achs_to_show, len(achs_f) * 74 - 10)
@@ -403,11 +406,12 @@ def draw_history():
                     achbg_color = stg['color_achbg_rare_lock']
             if stg['color_achbg_lock'] != None and achbg_color == None:
                 achbg_color = stg['color_achbg_lock']
-        if history[i]['type'] != 'lock_all' and achbg_color != None:
+        if achbg_color != None:
             pygame.draw.rect(screen, achbg_color, pygame.Rect(10, header_h + (i - scroll_history) * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2))
+        if stg['frame_size'] > 0:
+            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
         
         if history[i]['type'] == 'unlock':
-            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
             if history[i]['ach'].icon != None and ach_icons[history[i]['ach'].icon] != None:
                 screen.blit(ach_icons[history[i]['ach'].icon], (10, header_h + (i - scroll_history) * 74))
             else:
@@ -419,7 +423,6 @@ def draw_history():
             if stg['show_timestamps'] and not hide_bar_and_time:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'lock':
-            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
             if history[i]['ach'].icon_gray != None and ach_icons[history[i]['ach'].icon_gray] != None:
                 screen.blit(ach_icons[history[i]['ach'].icon_gray], (10, header_h + (i - scroll_history) * 74))
             else:
@@ -433,20 +436,18 @@ def draw_history():
             if stg['show_timestamps'] and not hide_bar_and_time:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'lock_all':
-            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
             screen.blit(lockallicon, (10, header_h + (i - scroll_history) * 74))
             show_text(screen, font_regular, 'All achievements locked', (84, header_h + (i - scroll_history) * 74), stg['color_text'])
             show_text(screen, font_small, 'File containing achievement data was deleted', (84, header_h + 17 + (i - scroll_history) * 74), stg['color_text'])
             if stg['show_timestamps']:
                 show_text(screen, font_general, history[i][f"time_{stg['history_time']}"], (84, header_h + 49 + (i - scroll_history) * 74), stg['color_text'])
         elif history[i]['type'] == 'progress_report':
-            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
             if history[i]['ach'].icon != None and ach_icons[history[i]['ach'].icon] != None:
                 screen.blit(ach_icons[history[i]['ach'].icon_gray], (10, header_h + (i - scroll_history) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
 
-            progress_str = f"{round_down(history[i]['value'][0], 2)}/{history[i]['value'][1]}"
+            progress_str = f"{history[i]['value'][0]}/{history[i]['value'][1]}"
             prg_str_len = font_regular.size(progress_str)[0]
             title_str = long_text(screen, stg['window_size_x'] - 94 - font_regular.size(f'({progress_str})')[0], font_regular, 'Progress: ' + history[i]['ach'].display_name_np, None, (255, 255, 255), True)
             show_text(screen, font_regular, f'{title_str} ({progress_str})', (84, header_h + (i - scroll_history) * 74), stg['color_text'])
@@ -485,7 +486,7 @@ if len(sys.argv) > 1:
                 source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
             elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
                 source_extra = ' '.join(appid.split()[2:])
-            elif achdata_source == 'steam' and len(appid.split()) > 2:
+            elif achdata_source == 'steam' and len(appid.split(' ')) > 2:
                 source_extra = appid.split()[2]
             elif achdata_source == None:
                 print('Invalid emulator name')
@@ -508,12 +509,12 @@ else:
     appid = check_alias(inp)
     if len(appid.split()) > 1:
         if appid == inp:
-            appid = check_alias(appid.split()[0]).split()[0] + ' ' + ' '.join(appid.split()[1:])
+            appid = check_alias(appid.split()[0]).split()[0] + ' ' + ' '.join(appid.split(' ')[1:])
         achdata_source = source_name(appid.split()[1])
         if achdata_source == 'codex':
             source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
         elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
-            source_extra = ' '.join(appid.split()[2:])
+            source_extra = ' '.join(appid.split(' ')[2:])
         elif achdata_source == 'steam' and len(appid.split()) > 2:
             source_extra = appid.split()[2]
         elif achdata_source == None:
@@ -529,8 +530,7 @@ if not appid.isnumeric():
 appid = str(int(appid))
 
 if not os.path.isdir('games'):
-    print('Missing "games" folder!')
-    sys.exit()
+    os.makedirs('games')
 
 stg = load_settings(appid, achdata_source)
 
@@ -575,6 +575,8 @@ if achdata_source == 'steam':
     if source_extra == None or not source_extra.isnumeric():
         print('Invalid Steam user ID')
         sys.exit()
+
+url_random = randint(0, 10000000)
 
 if not os.path.isfile('games/games.txt'):
     gamestxt = open('games/games.txt', 'w')
@@ -658,7 +660,7 @@ pygame.init()
 pygame.display.set_caption(f'Achievements | {gamename}')
 screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
 achs_to_show = int((stg['window_size_y'] - header_h + 10) / 74)
-if stg['window_size_y'] - 48 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
+if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
     achs_to_show -= 1
 stats_to_show = int((stg['window_size_y'] - header_h) / stg['font_line_distance_regular'])
 
@@ -707,7 +709,6 @@ if achdata_source == 'sse':
     for a in achs_json:
         achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
 
-url_random = randint(0, 10000000)
 achieved_json = None
 if achdata_source != 'steam':
     try:
@@ -725,8 +726,8 @@ if achdata_source != 'steam':
                 achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
     except FileNotFoundError:
         pass
-    except Exception:
-        print('Failed to read file (player achs). Will retry on next check.')
+    except Exception as ex:
+        print(f'Failed to read file (player achs) - {type(ex).__name__}')
 else:
     steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
     if steam_req != None:
@@ -752,17 +753,24 @@ except FileNotFoundError:
     pass
 
 def load_stats():
+    global stats_last_change
     m = 'rt'
     if achdata_source == 'sse':
         m = 'rb'
+    statsdata = {}
     try:
-        with open(get_stats_path(achdata_source, appid, source_extra), m) as statsfile:
+        stamp = os.stat(stats_path).st_mtime
+        if stamp == stats_last_change:
+            return False
+        stats_last_change = stamp
+        with open(stats_path, m) as statsfile:
             statsdata = statsfile.read()
         statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
     except FileNotFoundError:
-        statsdata = {}
-    except Exception:
-        print(f"Failed to read or process stats. Will retry on next check.")
+        stats_last_change = None
+    except Exception as ex:
+        stats_last_change = 'Retry'
+        print(f'Failed to load stats - {type(ex).__name__}')
     stats_changed = False
     for stat in stats:
         if stat in statsdata:
@@ -775,6 +783,14 @@ def load_stats():
             stats[stat].value = stats[stat].default
     return stats_changed
 
+def get_stat_last_change(name):
+    if achdata_source == 'goldberg':
+        return stats[name].fchecker.last_check
+    elif achdata_source == 'steam':
+        return time.time()
+    else:
+        return stats_last_change
+
 if achdata_source == 'steam' and len(stats) > 0:
     steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
     if steam_req != None and 'stats' in steam_req['playerstats']:
@@ -782,6 +798,8 @@ if achdata_source == 'steam' and len(stats) > 0:
             if s['name'] in stats.keys():
                 stats[s['name']].value = s['value']
 elif achdata_source != 'goldberg' and len(stats) > 0:
+    stats_path = get_stats_path(achdata_source, appid, source_extra)
+    stats_last_change = -1.0
     load_stats()
 
 achs = []
@@ -791,9 +809,7 @@ for ach in achs_json:
 ach_idxs = {}
 ach_icons = {}
 achs_unlocked = 0
-languages_used = set()
-if stg['secrets'] != 'normal' or stg['notif_lock']:
-    languages_used.add('english')
+languages_used = set(['english'])
 force_unlocks = {}
 if stg['forced_keep'] == 'save':
     try:
@@ -824,6 +840,9 @@ for i in range(len(achs)):
         except pygame.error:
             ach_icons[achs[i].icon_gray] = None
     languages_used.add(achs[i].language)
+
+    if achs[i].earned_time == 'stat_last_change':
+        achs[i].earned_time, achs[i].ts_first, achs[i].ts_earliest = [get_stat_last_change(achs[i].progress.value['operand1'])] * 3
     if achs[i].name in force_unlocks.keys():
         if not achs[i].earned or achs[i].force_unlock:
             achs[i].earned = True
@@ -841,7 +860,7 @@ for i in range(len(achs)):
         achs_unlocked += 1
     if achs[i].name in saved_tstamps.keys():
         if not stg['savetime_keep_locked'] and not achs[i].earned:
-            ts_change = max(ts_change, saved_tstamps[achs[i].name]['first'] != None or saved_tstamps[achs[i].name]['earliest'] != None)
+            ts_change = saved_tstamps[achs[i].name]['first'] != None or saved_tstamps[achs[i].name]['earliest'] != None
             saved_tstamps[achs[i].name]['first'] = None
             saved_tstamps[achs[i].name]['earliest'] = None
         if saved_tstamps[achs[i].name]['first'] != None:
@@ -874,7 +893,7 @@ if ts_change and stg['save_timestamps']:
         os.makedirs(save_dir)
     with open(f'{save_dir}/{appid}_time.json', 'w') as timefile:
         json.dump(saved_tstamps, timefile, indent=4)
-if (fu_change or ts_change) and isinstance(source_extra, str) and source_extra[:5] == 'path:':
+if os.path.isdir(save_dir) and isinstance(source_extra, str) and source_extra[:5] == 'path:':
     with open(f'{save_dir}/path.txt', 'w') as pathfile:
         pathfile.write(source_extra[5:])
 
@@ -968,14 +987,14 @@ def steam_update(reqtype):
         steam_requests_state[reqtype] = -1
 
 def check_search_match(ach, rq):
+    if ach.icon_gray == 'hidden_dummy_ach_icon':
+        return stg['secrets'] == 'bottom'
     if rq == '#hidden':
         return ach.hidden
     elif rq == '#not_hidden':
         return not ach.hidden
     elif rq == '#progress':
         return ach.progress != None
-    if ach.icon_gray == 'hidden_dummy_ach_icon':
-        return stg['secrets'] == 'bottom'
     rq = rq.lower()
     if rq in ach.display_name_np.lower():
         return True
@@ -1046,6 +1065,7 @@ while running:
                 if change['type'] == 'unlock':
                     if change['was_forced']:
                         force_unlocks.pop(change['ach_api'], None)
+                        fu_change = True
                         continue
                     achs_unlocked += 1
                     history.insert(0, {'type': 'unlock', 'ach': change['ach_obj'], 'time_real': change['time_real'], 'time_action': change['time_action'], 'unread': unread_default})
@@ -1103,7 +1123,7 @@ while running:
                     for stat in stats.values():
                         if stat.update_val():
                             stats_changed = True
-                else:
+                elif len(stats) > 0:
                     stats_changed = load_stats()
             elif stats_changed:
                 for s in stat_response['playerstats']['stats']:
@@ -1121,14 +1141,14 @@ while running:
                         if stg['bar_force_unlock']:
                             if ach.progress.real_value >= ach.progress.max_val and not ach.earned:
                                 ach.earned = True
-                                ts_change = max(ts_change, ach.update_time(stats[ach.progress.value['operand1']].fchecker.last_check))
+                                ts_change = max(ts_change, ach.update_time(get_stat_last_change(ach.progress.value['operand1'])))
                                 ach.force_unlock = True
                                 force_unlocks[ach.name] = ach.earned_time
                                 fu_change = True
                                 achs_unlocked += 1
                                 time_real = datetime.now().strftime(stg['strftime'])
                                 if achdata_source != 'steam':
-                                    time_action = datetime.fromtimestamp(stats[ach.progress.value['operand1']].fchecker.last_check)
+                                    time_action = datetime.fromtimestamp(get_stat_last_change(ach.progress.value['operand1']))
                                     time_action = time_action.strftime(stg['strftime'])
                                 else:
                                     time_action = time_real
@@ -1159,7 +1179,7 @@ while running:
                                 if stg['notif_lock']:
                                     time_real = datetime.now().strftime(stg['strftime'])
                                     if achdata_source != 'steam':
-                                        time_action = datetime.fromtimestamp(stats[ach.progress.value['operand1']].fchecker.last_check)
+                                        time_action = datetime.fromtimestamp(get_stat_last_change(ach.progress.value['operand1']))
                                         time_action = time_action.strftime(stg['strftime'])
                                     else:
                                         time_action = time_real
@@ -1251,12 +1271,14 @@ while running:
                     header_extra = 'search'
                     flip_required = True
             elif event.key == pygame.K_BACKQUOTE:
-                c = ''
+                xnote = ''
                 if achdata_source == 'codex':
-                    c = {False: ' (Documents)', True: ' (AppData)'}
-                    c = c[source_extra]
-                print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{c}')
-                print(' - Version: v1.3.0')
+                    xnote = {False: ' (Documents)', True: ' (AppData)'}
+                    xnote = xnote[source_extra]
+                elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
+                    xnote = ' (' + save_dir.split('_')[-1] + ')'
+                print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
+                print(' - Version: v1.3.0 (release)')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

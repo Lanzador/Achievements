@@ -41,7 +41,7 @@ class Achievement:
             if stg['forced_time_load'] == 'now':
                 self.earned_time = time.time()
             else:
-                self.earned_time = stats[self.progress.value['operand1']].fchecker.last_check
+                self.earned_time = 'stat_last_change'
             self.force_unlock = True
 
         self.ts_first = None
@@ -205,9 +205,7 @@ def filter_achs(achs, state, stg):
         if state == 1:
             first_lock = len(achs_f)
         unlocked_slice = achs_f[:first_lock]
-        for u in unlocked_slice:
-            if not u.earned:
-                print(u.name)
+        unlocked_slice.reverse()
         unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
         achs_f = unlocked_slice + achs_f[first_lock:]
 
@@ -238,7 +236,7 @@ def update_achs(achs, newdata, achsfile, stg):
             else:
                 ach.progress_reported = None
 
-            if ach.earned != newdata[ach.name]['earned'] or (ach.force_unlock and newdata[ach.name]['earned']):
+            if (not ach.force_unlock and ach.earned != newdata[ach.name]['earned']) or (ach.force_unlock and newdata[ach.name]['earned']):
                 if not ach.earned or ach.force_unlock:
                     change['ts_change'] = ach.update_time(newdata[ach.name]['earned_time'])
                     change['type'] = 'unlock'
@@ -257,7 +255,7 @@ def update_achs(achs, newdata, achsfile, stg):
                         ach.ts_earliest = None
                         change['ts_change'] = True
                 ach.earned = newdata[ach.name]['earned']
-            elif ach.earned_time != newdata[ach.name]['earned_time']:
+            elif ach.earned_time != newdata[ach.name]['earned_time'] and ach.earned and not ach.force_unlock:
                 change['type'] = 'time'
                 change['old'] = ach.earned_time
                 change['ts_change'] = ach.update_time(newdata[ach.name]['earned_time'])
@@ -265,14 +263,17 @@ def update_achs(achs, newdata, achsfile, stg):
         elif not ach.force_unlock:
             if ach.earned:
                 change['type'] = 'lock'
+                change['lock_all'] = False
                 if newdata == None:
                     change['lock_all'] = True
                     change['time_action'] = change['time_real']
-                    ach.progress_reported = None
-                else:
-                    change['lock_all'] = False
+                if not stg['savetime_keep_locked']:
+                    ach.ts_first = None
+                    ach.ts_earliest = None
+                    change['ts_change'] = True
             ach.earned = False
             ach.earned_time = 0.0
+            ach.progress_reported = None
 
         change['ach_obj'] = ach
 
@@ -282,56 +283,58 @@ def update_achs(achs, newdata, achsfile, stg):
     return (achs, changes)
 
 def convert_achs_format(data, source, achs_crc32=None):
-    conv = {}
-    if source in ('codex', 'ali213'):
-        names = {'Achieved': 'Achieved', 'CurProgress': 'CurProgress',
-                 'MaxProgress': 'MaxProgress', 'UnlockTime': 'UnlockTime'}
-        if source == 'ali213':
-            names['Achieved'] = 'HaveAchieved'
-            names['CurProgress'] = 'nCurProgress'
-            names['MaxProgress'] = 'nMaxProgress'
-            names['UnlockTime'] = 'HaveAchievedTime'
-        reading_ach = None
-        for l in data.split('\n'):
-            if len(l) > 0 and l[0] == '[' and l[-1] == ']':
-                reading_ach = l[1:-1]
-                if reading_ach != 'SteamAchievements':
-                    conv[reading_ach] = {}
-            elif reading_ach != None:
-                spl = l.split('=')
-                if len(spl) != 2 or reading_ach == 'SteamAchievements':
-                    continue
-                if spl[0] == names['Achieved']:
-                    conv[reading_ach]['earned'] = bool(int(spl[1]))
-                elif spl[0] == names['CurProgress'] and spl[1] != '0':
-                    dotspl = spl[1].split('.')
-                    if len(dotspl) == 1:
-                        conv[reading_ach]['progress'] = int(spl[1])
-                    else:
-                        conv[reading_ach]['progress'] = float(spl[1])
-                elif spl[0] == names['MaxProgress'] and spl[1] != '0':
-                    dotspl = spl[1].split('.')
-                    if len(dotspl) == 1:
-                        conv[reading_ach]['max_progress'] = int(spl[1])
-                    else:
-                        conv[reading_ach]['max_progress'] = float(spl[1])
-                elif spl[0] == names['UnlockTime']:
-                    conv[reading_ach]['earned_time'] = float(spl[1])
-    elif source == 'sse':
-        for i in range(struct.unpack('i', data[:4])[0]):
-            e = data[4 + 24 * i : 28 + 24 * i]
-            c = struct.unpack('I', e[0:4])[0]
-            if c in achs_crc32:
-                achname = achs_crc32[c]
+    try:
+        conv = {}
+        if source in ('codex', 'ali213'):
+            names = {'Achieved': 'Achieved', 'CurProgress': 'CurProgress',
+                     'MaxProgress': 'MaxProgress', 'UnlockTime': 'UnlockTime'}
+            if source == 'ali213':
+                names['Achieved'] = 'HaveAchieved'
+                names['CurProgress'] = 'nCurProgress'
+                names['MaxProgress'] = 'nMaxProgress'
+                names['UnlockTime'] = 'HaveAchievedTime'
+            reading_ach = None
+            for l in data.split('\n'):
+                if len(l) > 0 and l[0] == '[' and l[-1] == ']':
+                    reading_ach = l[1:-1]
+                    if reading_ach != 'SteamAchievements':
+                        conv[reading_ach] = {}
+                elif reading_ach != None:
+                    spl = l.split('=')
+                    if len(spl) != 2 or reading_ach == 'SteamAchievements':
+                        continue
+                    if spl[0] == names['Achieved']:
+                        conv[reading_ach]['earned'] = bool(int(spl[1]))
+                    elif spl[0] == names['CurProgress'] and spl[1] != '0':
+                        dotspl = spl[1].split('.')
+                        if len(dotspl) == 1:
+                            conv[reading_ach]['progress'] = int(spl[1])
+                        else:
+                            conv[reading_ach]['progress'] = float(spl[1])
+                    elif spl[0] == names['MaxProgress'] and spl[1] != '0':
+                        dotspl = spl[1].split('.')
+                        if len(dotspl) == 1:
+                            conv[reading_ach]['max_progress'] = int(spl[1])
+                        else:
+                            conv[reading_ach]['max_progress'] = float(spl[1])
+                    elif spl[0] == names['UnlockTime']:
+                        conv[reading_ach]['earned_time'] = float(spl[1])
+        elif source == 'sse':
+            for i in range(struct.unpack('i', data[:4])[0]):
+                e = data[4 + 24 * i : 28 + 24 * i]
+                c = struct.unpack('I', e[0:4])[0]
+                if c in achs_crc32:
+                    achname = achs_crc32[c]
+                    conv[achname] = {}
+                    conv[achname]['earned'] = bool(struct.unpack('i', e[20:24])[0])
+                    conv[achname]['earned_time'] = float(struct.unpack('i', e[8:12])[0])
+        elif source == 'steam':
+            for ach in data:
+                achname = ach['apiname']
                 conv[achname] = {}
-                conv[achname]['earned'] = bool(struct.unpack('i', e[20:24])[0])
-                conv[achname]['earned_time'] = float(struct.unpack('i', e[8:12])[0])
-    elif source == 'steam':
-        for ach in data:
-            achname = ach['apiname']
-            conv[achname] = {}
-            conv[achname]['earned'] = ach['achieved']
-            conv[achname]['earned_time'] = float(ach['unlocktime'])
-    else:
+                conv[achname]['earned'] = ach['achieved']
+                conv[achname]['earned_time'] = float(ach['unlocktime'])
+        return conv
+    except Exception as ex:
+        print(f'Failed to convert achievements - {type(ex).__name__}')
         return {}
-    return conv

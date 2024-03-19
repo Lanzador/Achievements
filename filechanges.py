@@ -4,7 +4,6 @@ import platform
 import json
 import time
 import struct
-import zlib
 
 def get_player_achs_path(source, appid, extra=None):
     if source == 'goldberg':
@@ -75,23 +74,6 @@ def get_stats_path(source, appid, extra=None):
         print('Unable to determine location of player stats')
         sys.exit()
 
-def get_save_dir(appid, source, extra):
-    d = 'save/' + source
-    if source == 'codex' and extra == True:
-        d += '/appdata'
-    elif source in ('ali213', 'sse'):
-        if extra == None:
-            if source == 'ali213':
-                d += '/Player'
-        elif not (len(extra) > 5 and extra[:5] == 'path:'):
-            d += f'/{extra}'
-        else:
-            path_crc = zlib.crc32(bytes(extra[5:], 'utf-8'))
-            d += f'/path_{appid}_{path_crc}'
-    elif source == 'steam':
-        d += f'/{extra}'
-    return d
-
 class FileChecker:
     def __init__(self, filetype, locinfo, sleep_t):
 
@@ -140,8 +122,8 @@ class FileChecker:
                                 newdata = json.load(changed_file)
                             else:
                                 newdata = changed_file.read()
-                        except Exception:
-                            print('Failed to read file (player achs). Will retry on next check.')
+                        except Exception as ex:
+                            print(f'Failed to read file (player achs) - {type(ex).__name__}')
                             self.last_check = 'Retry'
                             return False, None
 
@@ -153,24 +135,24 @@ class FileChecker:
                                     newdata = struct.unpack('i', changed_file.read(4))[0]
                                 elif self.locinfo['type'] == 'float':
                                     newdata = struct.unpack('f', changed_file.read(4))[0]
-                            except Exception:
-                                print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
+                            except Exception as ex:
+                                print(f"Failed to read file (stat: {self.locinfo['name']}) - {type(ex).__name__}")
                                 self.last_check = 'Retry'
                                 return False, None
                     elif self.source in ('codex', 'ali213'):
                         with open(self.path) as changed_file:
                             try:
                                 newdata = changed_file.read()
-                            except Exception:
-                                print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
+                            except Exception as ex:
+                                print(f'Failed to read file (stats) - {type(ex).__name__}')
                                 self.last_check = 'Retry'
                                 return False, None
                     elif self.source == 'sse':
                         with open(self.path, 'rb') as changed_file:
                             try:
                                 newdata = changed_file.read()
-                            except Exception:
-                                print(f"Failed to read file (stat: {self.locinfo['name']}). Will retry on next check.")
+                            except Exception as ex:
+                                print(f'Failed to read file (stats) - {type(ex).__name__}')
                                 self.last_check = 'Retry'
                                 return False, None
                 return True, newdata
@@ -180,4 +162,13 @@ class FileChecker:
             if self.last_check != None:
                 self.last_check = None
                 return True, None
+            return False, None
+        except Exception as ex:
+            t = 'player achs'
+            if self.filetype == 'stat':
+                t = 'stats'
+                if self.source == 'goldberg':
+                    t = f"stat: {self.locinfo['name']}"
+            print(f'Failed to open file ({t}) - {type(ex).__name__}')
+            self.last_check = 'Retry'
             return False, None
