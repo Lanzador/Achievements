@@ -36,6 +36,7 @@ notif_limit=3
 notif_timeout=3
 notif_lock=0
 notif_icons=1
+notif_icons_no_ico=convert
 language=english
 language_requests=
 unlockrates=name

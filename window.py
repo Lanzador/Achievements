@@ -897,7 +897,8 @@ if os.path.isdir(save_dir) and isinstance(source_extra, str) and source_extra[:5
     with open(f'{save_dir}/path.txt', 'w') as pathfile:
         pathfile.write(source_extra[5:])
 
-for i in ach_icons.keys():
+for i in ach_icons:
+    if ach_icons[i] == None: continue
     size = (ach_icons[i].get_width(), ach_icons[i].get_height())
     if size != (64, 64):
         if stg['smooth_scale']:
@@ -905,9 +906,27 @@ for i in ach_icons.keys():
         else:
             ach_icons[i] = pygame.transform.scale(ach_icons[i], (64, 64))
 
+if platform.uname().system == 'Windows' and stg['notif_icons'] and stg['notif_icons_no_ico'] != 'ignore':
+    icons_not_conv = 0
+    for i in ach_icons:
+        if ach_icons[i] == None: continue
+        if not os.path.isfile(f'games/{appid}/achievement_images/ico/{i}.ico'):
+            icons_not_conv += 1
+    if icons_not_conv > 0:
+        print('Icons not converted:', icons_not_conv)
+        if stg['notif_icons_no_ico'] == 'convert':
+            print('------------------------------')
+            if os.path.isfile('icon_converter.py'):
+                os.system(f'py icon_converter.py {appid} -s')
+            elif os.path.isfile('icon_converter.exe'):
+                os.system(f'icon_converter.exe {appid} -s')
+            else:
+                print('Icon converter not found')
+            print('------------------------------')
+
 ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
 
-font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), int(stg['font_size_general']))
+font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
 font_achs_regular = {}
 font_achs_small = {}
 long_hidden_desc = {}
@@ -1278,7 +1297,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.3.0 (release)')
+                print(' - Version: v1.3.1')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

@@ -1,3 +1,7 @@
+## v1.3.1
+- Fix broken icon handling.
+- Automatically run `icon_converter` (Windows-only; can be disabled).
+
 ## v1.3.0
 
 ### This commit
@@ -15,19 +19,19 @@
 - Create `games` folder automatically instead of refusing to run if it doesn't exist (that behavior was added in `2e85e85`).
 - Changed the default value of `bar_force_unlock` to `true`.
 - Fixed the "Hidden achievements" line not appearing in search results if a `#keyword` is used.
-- [icon_converter, save_finder] Allow `=` in alias.
-- [ach_dumper] Only load stat display names if they're enabled in settings.
-- [save_finder_all] Don't save list of app names received from Steam (was used for testing and not removed later).
+- `[icon_converter, save_finder]` Allow `=` in alias.
+- `[ach_dumper]` Only load stat display names if they're enabled in settings.
+- `[save_finder_all]` Don't save list of app names received from Steam (was used for testing and not removed later).
 
 ### Commit 670e6cc
 - Another sorting fix.
 - Handle unknown request errors.
 - Fixed using `font_size_regular` instead of `font_size_general` for game name, causing a crash. Extra proof of the settings names being weird.
 - Press `Enter` to show search results.
-- [ach_dumper] -args can be given in the `Enter AppID:` input.
-- [ach_dumper] Unlock rates, if enabled in `settings.txt`. Relies on percentages downloaded by the main program.
-- [ach_dumper] Sorting (`-r`, `-uot`, `-t`).
-- [ach_dumper] Changed folder name (`text_dump` -> `ach_dumper`).
+- `[ach_dumper]` -args can be given in the `Enter AppID:` input.
+- `[ach_dumper]` Unlock rates, if enabled in `settings.txt`. Relies on percentages downloaded by the main program.
+- `[ach_dumper]` Sorting (`-r`, `-uot`, `-t`).
+- `[ach_dumper]` Changed folder name (`text_dump` -> `ach_dumper`).
 - Added `save_finder_all`: a script that finds all supported saves (except `path:` ones) and prints a list, including game names from Steam.
 
 ### Commit 5db5f30
@@ -37,7 +41,7 @@
 - Fix "All achievements locked" history notification crash. Remove icon from system notification of the same type.
 - Stats file is now loaded once (instead of once for every stat) for non-Goldberg emulators.
 - `~` info: changed order from `Emulator / AppID / Username` to `AppID / Emulator / Username`.
-- [icon_converter] Shows number of successfully converted icons.
+- `[icon_converter]` Shows number of successfully converted icons.
 - Added `ach_dumper`: a script that writes the achievement list with your progress to a text file for easy sharing.
 
 ### Commit 2e85e85
@@ -56,18 +60,18 @@
 - Pressing the `~` key will print which game/emulator/user are being tracked and the program's version.
 - More info is printed when an achievement is clicked: progress stat, rarity (if `unlockrates=load`), unlock time (if `show_timestamps` is diabled).
 - Moved converted icons from `games/ico/[AppID]` to `games/[AppID]/achievement_images/ico`.
-- [icon_converter] Shows time taken.
-- [icon_converter] Added `-c` to check if icons are converted instead of converting them.
-- [icon_converter] Handle missing `alias.txt` and `achievements.json`.
-- [icon_converter] Show number of current app instead of amount of finished apps (`1/1` instead of `0/1`).
-- [icon_converter] If there's an error while converting an icon, print its type. Also print if an icon has already been converted.
+- `[icon_converter]` Shows time taken.
+- `[icon_converter]` Added `-c` to check if icons are converted instead of converting them.
+- `[icon_converter]` Handle missing `alias.txt` and `achievements.json`.
+- `[icon_converter]` Show number of current app instead of amount of finished apps (`1/1` instead of `0/1`).
+- `[icon_converter]` If there's an error while converting an icon, print its type. Also print if an icon has already been converted.
 - Added `save_finder`: a script that finds supported saves for a given AppID. Supports alias.
 
 ### Commit f781df9
 - Some changes and fixes to Linux notifications by @detiam. See his PR for more information.
 
 ### Commit 4f52cda
-- [icon_converter] Fix alias.
+- `[icon_converter]` Fix alias.
 
 ## v1.2.1
 - Hide API names when clicking hidden achievements, unless holding `SHIFT`.

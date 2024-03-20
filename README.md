@@ -86,7 +86,7 @@ Only `int` and `float` stats are supported. I don't think Goldberg has proper `a
 Only Goldberg actually unlocks achievements that are based entirely on stats and aren't unlocked by the game in the normal way, so achievements with progressbars are shown as unlocked and their timestamp is saved when the target value is reached if this behavior is enabled in settings.
 
 ### "Achievement Progress" notifications
-Some rare games occasionally display "Achievement Progress" notifications on Steam. Those are supported here and even have a progressbar in the "History" tab.
+Some rare games occasionally display "Achievement Progress" notifications on Steam. Those are supported here and even have a progressbar in the "History" tab. (Not for all emulators)
 
 ### Fix for always empty progressbars
 Some games' achievement pages on Steam show empty progressbars with progress numbers always being the same as target numbers. By default, this behavior is copied. Enable `bar_ignore_min` for the game in settings as a workaround. Ha, can't do that on Steam!
@@ -175,7 +175,9 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `notif_lock` - show notifications (and history entries) when an achievement is locked or when the achievement progress file is deleted. Default: `false`
 
-`notif_icons` - show icons in notifications. Adds extra delay on Windows if icon_converter is not used in advance. Default: `true`
+`notif_icons` - show achievement icons in notifications. Adds extra delay on Windows if `icon_converter` is not used in advance. Default: `true`
+
+`notif_icons_no_ico` - behavior if achievement icons aren't converted. Ignored if `notif_icons` is disabled. Windows-only. `ignore` - do nothing; `warn` - print count of icons that need to be converted; `convert` - run `icon_converter` (default).
 
 `language` - comma-separated (no spaces) list of languages to use for achievements. First available language is used. If nothing is available, English is used. Default: `english`
 
@@ -260,7 +262,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 ### icon_converter
 Windows doesn't accept `.jpg` icons for notifications, so I have to convert them to `.ico`. Doing this every time a notification is shown adds some delay. (Also, temporarily converted icons are deleted in 2 seconds, so a crash is probably possible if they're not loaded in time)
 
-To prevent that delay, achievement icons can be converted in advance.
+To prevent that delay, achievement icons can be converted in advance. (This is done automatically since v1.3.1)
 
 After running the converter, enter the AppID (or alias) of the game you want to convert icons for.
 
@@ -285,6 +287,14 @@ A list of emulators (with usernames, where applicable) will be printed. If nothi
 Run this to find all supported non-`path:` saves on your PC.
 
 If possible, game names will be printed next to AppIDs. Sometimes not all names are retrieved for some reason, so if too many IDs are left without a name, try running this again.
+
+Accepted arguments:
+
+- `-g` - group saves by game (rather than by emulator).
+
+- `-eg` - group by emulator, but subgroup by game (rather than by username).
+
+- `-eg2` - alternative format for `-eg`.
 
 ### ach_dumper
 This script writes the achievement list for a given game to a text file which you can send to others to show your progress without screenshoting each page of the list.
