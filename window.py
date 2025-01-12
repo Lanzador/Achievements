@@ -172,7 +172,7 @@ def draw_achs():
             screen.blit(listbutton, (stg['window_size_x'] - 32, 10))
         elif header_extra == 'search_results':
             draw_game_progress(btn_locs['filter_search'][state_filter].topleft[0] - 20)
-            screen.blit(filter_buttons[state_filter], btn_locs['filter'][state_filter])
+            screen.blit(filter_buttons[state_filter], btn_locs['filter_search'][state_filter])
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
         elif header_extra == 'sort':
             draw_game_progress(stg['window_size_x'] - 180)
@@ -377,7 +377,7 @@ def draw_stats():
     screen.blit(achsbutton, btn_locs['achs'])
 
     if len(stats) == 0:
-        show_text(screen, font_general, 'No stats found', (10, header_h))
+        show_text(screen, font_general, 'No stats found', (10, header_h), stg['color_text'])
 
     already_shown = 0 - scroll_stats
     for stat in stats.values():
@@ -407,7 +407,7 @@ def draw_history():
     screen.blit(unlocksbutton, btn_locs['history_unlocks'])
 
     if len(history) == 0:
-        show_text(screen, font_general, 'History is empty', (10, header_h))
+        show_text(screen, font_general, 'History is empty', (10, header_h), stg['color_text'])
 
     for i in range(scroll_history, min(scroll_history + achs_to_show + 1, len(history))):
 
