@@ -366,6 +366,8 @@ This script writes the achievement list for a given game to a text file which yo
 
 Settings used: `language`, `language_requests`, `savetime_shown`, `bar_hide_secret`, `bar_ignore_min`, `unlockrates`, `secrets`, `stat_display_names`, `strftime`, `api_key` (if loading progress from Steam)
 
+Use `settings_ad.txt` to set separate options for ach_dumper. Works for game/emulator-specific settings, too. Just add `_ad` to the filename.
+
 Game name, unlock rates and stat display names are loaded from files created by the main program. They are not updated by the script.
 
 Accepted arguments:
