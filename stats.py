@@ -1,5 +1,6 @@
 import struct
 from filechanges import FileChecker
+from experimental import *
 
 class Stat:
     def __init__(self, fileinfo, s_type, default, sleep_t, stat_dnames, inc_only):

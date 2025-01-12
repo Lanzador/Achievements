@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 import struct
 from showtext import long_text
+from experimental import *
 
 class Achievement:
     def __init__(self, achdata, player_achs={}, stats={}, ach_percentages={}, stg=None):
@@ -105,6 +106,21 @@ class Achievement:
             self.ts_earliest = t
             save_changed = True
         return save_changed
+
+    def to_json(self):
+        j = {}
+        j['hidden'] = '1' if self.hidden else '0'
+        j['displayName'] = self.display_name
+        j['description'] = self.description
+        j['icon'] = self.icon
+        j['icon_gray'] = self.icon_gray
+        j['name'] = self.name
+        if self.progress != None:
+            j['progress'] = {}
+            j['progress']['min_val'] = str(self.progress.min_val)
+            j['progress']['max_val'] = str(self.progress.max_val)
+            j['progress']['value'] = self.progress.value
+        return j
 
 class AchievementProgress:
     def __init__(self, progressdata, stats):

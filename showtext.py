@@ -1,3 +1,5 @@
+from experimental import *
+
 def show_text(screen, font, s, place, color=(255, 255, 255)):
     rtext = font.render(s, True, color)
     screen.blit(rtext, place)

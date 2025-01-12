@@ -3,6 +3,7 @@ import sys
 import platform
 import json
 import time
+import math
 import zlib
 import threading
 import shutil
@@ -17,6 +18,254 @@ from achievements import *
 from stats import *
 from filechanges import *
 from settings import *
+from experimental import *
+
+### EXPERIMENTAL
+# Need to load some stuff early for the "Enter AppID" screen to work.
+# Game/emulator overrides are ignored for now, as the AppID is unknown.
+stg = {}
+for s in known_settings:
+    stg[s] = known_settings[s]['default']
+stg = load_settings_file(stg, 'settings.txt')
+pygame.init()
+font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
+
+input_real = input
+def input(text='', multiline=False, show_output_lines=0):
+    global screen, screen_exists, last_console_len
+    if not stg['exp_no_cmd_input'] and not multiline:
+        try:
+            inp = input_real(text)
+            internal_console.append({'time': time.time(), 'text': text + inp})
+            last_console_len += 1
+            return inp
+        except RuntimeError:
+            if not screen_exists:
+                screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+                screen_exists = True
+    elif not screen_exists:
+        screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+        screen_exists = True
+    text_o = text
+    if show_output_lines > 0:
+        text = '\n'.join(map(lambda x : x['text'], internal_console[-show_output_lines:])) + '\n' + text
+    inp = ''
+    flip_required_l = True
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                keys = pygame.key.get_pressed()
+                if event.key == pygame.K_RETURN:
+                    if multiline and not 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                        inp += '\n'
+                    else:
+                        global flip_required
+                        flip_required = True
+                        if not multiline:
+                            print(text_o + inp)
+                            last_console_len += 1
+                        return inp
+                elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    paste = pyperclip.paste()
+                    if not multiline:
+                        paste = paste.replace('\n', '')
+                    inp += paste
+                elif event.key == pygame.K_BACKSPACE:
+                    if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                        inp = ''
+                    else:
+                        inp = inp[:-1]
+                else:
+                    inp += event.unicode
+                flip_required_l = True
+        if flip_required_l:
+            screen.fill(stg['color_background'])
+            lines = (text + inp).split('\n')
+            for i in range(len(lines)):
+                show_text(screen, font_general, lines[i], (0, i * stg['font_line_distance_regular']), stg['color_text'])
+            pygame.display.flip()
+            flip_required_l = False
+        time.sleep(stg['delay_sleep'])
+
+def draw_console():
+    screen.fill(stg['color_background'])
+    already_shown = 0
+    end = len(internal_console) + scroll_console
+    for i in range(max(0, end - console_lines_to_show), min(end, len(internal_console))):
+        long_text(screen, stg['window_size_x'], font_general, internal_console[i]['text'], (0, already_shown * stg['font_line_distance_regular']), stg['color_text'])
+        already_shown += 1
+    pygame.display.flip()
+
+def draw_console_line():
+    screen.fill(stg['color_background'])
+    dt = datetime.fromtimestamp(viewing_line['time'])
+    dt.strftime(stg['strftime'])
+    info = f'Line #{viewing_line_num} | Time: {viewing_line['time']} ({dt.strftime(stg['strftime'])})'
+    show_text(screen, font_general, info, (0, 0), stg['color_text'])
+    multiline_text(screen, 99999, stg['font_line_distance_regular'], stg['window_size_x'], font_general, viewing_line['text'], (0, stg['font_line_distance_regular']), stg['color_text'])
+    pygame.display.flip()
+
+def get_grid_height():
+     return math.ceil(len(achs_f) / achs_to_show_horiz) + stg['exp_grid_empty_line']
+
+def find_a(ach):
+    if isinstance(ach, int):
+        return achs[ach]
+    if isinstance(ach, str):
+        return achs[ach_idxs[ach]]
+    return ach
+
+def unlock(a):
+    if not a in achieved_json:
+        achieved_json[a] = {}
+    achieved_json[a]['earned'] = True
+    achieved_json[a]['earned_time'] = time.time()
+    load_everything(True, True)
+
+def unlock_all():
+    t = time.time()
+    for a in achs:
+        if not a.name in achieved_json:
+            achieved_json[a.name] = {}
+        achieved_json[a.name]['earned'] = True
+        achieved_json[a.name]['earned_time'] = t
+    load_everything(True, True)
+
+def edit(n):
+    if achdata_source == 'steam' and not n in (5, 'v'):
+        print('Can only use edit() for save dir when tracking Steam')
+        return
+    p = None
+    if n in (1, 'a'):
+        p = get_player_achs_path(achdata_source, appid, source_extra)
+    elif n in (2, 's'):
+        p = get_stats_path(achdata_source, appid, source_extra)
+    elif n in (3, 'as', 'b'):
+        edit(1)
+        edit(2)
+    elif n in (4, 'f'):
+        p = os.path.dirname(get_player_achs_path(achdata_source, appid, source_extra))
+    elif n in (5, 'v'):
+        p = os.path.abspath(save_dir)
+    if p != None:
+        if not(os.path.exists(p)):
+            print(p, 'does not exist')
+            return
+        import webbrowser
+        webbrowser.open(p)
+
+def defset():
+    for s in stg:
+        stg[s] = known_settings[s]['default']
+    load_everything(True, True)
+    upd_hist_objs()
+
+def ch_lang(l):
+    if not isinstance(l, list):
+        l = [l]
+    stg['language'] = l
+    load_everything(True, True)
+    upd_hist_objs()
+
+def list_langs(a):
+    a = find_a(a)
+    if isinstance(a.display_name, dict):
+        print()
+        print(a.name)
+        for l in a.display_name:
+            print(f' - {l}')
+            print(f' - - {a.display_name[l]}')
+            print(f' - - {a.description[l]}')
+
+def ch_size(x, y):
+    stg['window_size_x'] = x
+    stg['window_size_y'] = y
+    load_everything(True, True)
+
+def ch_game(x):
+    global appid, achdata_source, source_extra
+    appid, achdata_source, source_extra = load_game(x)
+    load_everything()
+
+def ch_emu(x):
+    global appid, achdata_source, source_extra
+    _, achdata_source, source_extra = load_game(appid + ' ' + x)
+    load_everything()
+
+def ch_user(x):
+    global appid, achdata_source, source_extra
+    source_extra = load_game(appid + ' ' + achdata_source + ' ' + x)[2]
+    load_everything()
+
+def upd_hist_objs():
+    for h in history:
+        if 'ach' in h:
+            h['ach'] = find_a(h['ach'].name)
+
+def save_hist(p=None, save_ach_data=False, no_stg_loc=False):
+    if p == None:
+        p = f'{save_dir}/{appid}_history.json'
+        no_stg_loc = True
+    if not no_stg_loc:
+        p = stg['exp_history_location'].replace('*', p)
+    hist_copy = []
+    for h in history:
+        hist_copy.append(h.copy())
+        hc = hist_copy[-1]
+        if 'ach' in hc:
+            if save_ach_data:
+                hc['ach'] = hc['ach'].to_json()
+            else:
+                hc['ach'] = hc['ach'].name
+    with open(p, 'w') as f:
+        json.dump(hist_copy, f, indent=4)
+
+def load_hist(p=None, no_stg_loc=False):
+    global history
+    if p == None:
+        p = f'{save_dir}/{appid}_history.json'
+        no_stg_loc = True
+    if not no_stg_loc:
+        p = stg['exp_history_location'].replace('*', p)
+    history.clear()
+    with open(p) as f:
+        history = json.load(f)
+    for h in history:
+        if 'ach' in h:
+            if isinstance(h['ach'], dict):
+                h['ach'] = Achievement(h['ach'], achieved_json, stats, ach_percentages, stg)
+            else:
+                h['ach'] = find_a(h['ach'])
+
+def test_notif(t, ach=None, prog=None):
+    types = {'u': 'unlock', 'l': 'lock', 'la': 'lock_all',
+             'p': 'progress_report', 'sc': 'schema_change'}
+    t = types.get(t, t)
+    if not t in notif_names:
+        print('Unknown notification type')
+        return
+    if not t in ('lock_all', 'schema_change'):
+        if ach == None:
+            print('Missing achievement argument')
+            return
+        ach = find_a(ach)
+    if t == 'progress_report' and prog == None:
+        print('Missing progress argument')
+        return
+    dt = datetime.now().strftime(stg['strftime'])
+    ch = {'time_real': dt, 'time_action': dt, 'type': t}
+    if ach != None:
+        ch['ach_obj'] = ach
+    if t =='lock_all':
+        ch['type'] = 'lock'
+    if ch['type'] == 'lock':
+        ch['lock_all'] = t == 'lock_all'
+    if ch['type'] == 'progress_report':
+        ch['value'] = prog
+    create_notification(t, ch)
+### EXPERIMENTAL
 
 if platform.uname().system == 'Linux':
     from gi import require_version
@@ -128,8 +377,10 @@ def draw_progressbar(x, y, w, h, p1, p2):
     if p2 != 0:
         pygame.draw.rect(screen, c2, pygame.Rect(x, y, p1 * w // p2, h))
 
-def draw_scrollbar(scr, maxscr, total_height):
-    scrollbar_height = (stg['window_size_y'] - header_h) ** 2 // total_height
+def draw_scrollbar(scr, maxscr, total_height, shown_height=None):
+    if shown_height == None:
+        shown_height = stg['window_size_y'] - header_h
+    scrollbar_height = (stg['window_size_y'] - header_h) * shown_height // total_height
     scrollbar_position = header_h + scr * (stg['window_size_y'] - header_h - (scrollbar_height)) // maxscr
     if scrollbar_height < 1:
         scrollbar_height = 1
@@ -160,6 +411,168 @@ def draw_game_progress(max_name_length):
         game_progress_str += ' (0%)'
     show_text(screen, font_general, game_progress_str, (stg['gamebar_length'] + 20, y - 2), stg['color_text'])
 
+def draw_ach(i, force_bottom=False):
+    if i >= len(achs_f):
+        return
+
+    if not force_bottom:
+        scroll = globals()['scroll']
+    else:
+        scroll = i - (achs_to_show - 1)
+
+    font_regular = font_achs_regular[achs_f[i].language]
+    font_small = font_achs_small[achs_f[i].language]
+
+    bar_length = stg['bar_length']
+
+    can_show_desc = not achs_f[i].hidden or (achs_f[i].earned and not hide_all_secrets) or reveal_secrets
+    long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
+
+    if achs_f[i].progress != None:
+        bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
+        bar_hidden_unsup = stg['bar_hide_unsupported'] == 'all' and not achs_f[i].progress.support
+        bar_hidden_unsup_st = stg['bar_hide_unsupported'] == 'stat' and not achs_f[i].progress.support_error in (None, "Unknown stat")
+        bar_hidden_secret = stg['bar_hide_secret'] and not can_show_desc
+        bar_shown = not (bar_hidden_unlock or bar_hidden_unsup or bar_hidden_unsup_st or bar_hidden_secret)
+    else:
+        bar_shown = False
+
+    hovered_over = hover_ach == i - scroll and not force_bottom
+    hide_bar_and_time = hovered_over and long_desc
+
+    reveal_icon = stg['reveal_icons_hover'] and can_show_desc and (hovered_over or force_bottom)
+    reveal_icon = reveal_icon or (stg['reveal_icons_revsecr'] != 'never' and reveal_secrets and (hovered_over or force_bottom or stg['reveal_icons_revsecr'] == 'always'))
+
+    desc_max_lines = 3
+    if bar_shown or (achs_f[i].earned and stg['show_timestamps']):
+        desc_max_lines = 2
+    if hovered_over:
+        desc_max_lines = 3
+
+    achbg_color = None
+    ach_text_color = None
+    if achs_f[i].earned:
+        if achs_f[i].rare:
+            achbg_color = stg['color_achbg_rare']
+            ach_text_color = stg['color_text_rare']
+        else:
+            achbg_color = stg['color_achbg_unlock']
+            ach_text_color = stg['color_text_unlock']
+    else:
+        if achs_f[i].rare:
+            achbg_color = stg['color_achbg_rare_lock']
+            ach_text_color = stg['color_text_rare_lock']
+        else:
+            achbg_color = stg['color_achbg_lock']
+            ach_text_color = stg['color_text_lock']
+    if hovered_over:
+        if stg['color_achbg_hover'] != None:
+            achbg_color = stg['color_achbg_hover']
+        if stg['color_text_hover'] != None:
+            ach_text_color = stg['color_text_hover']
+
+    time_color = ach_text_color
+    time_font = font_regular
+    if stg['color_time_general']:
+        time_color = stg['color_text']
+    if stg['font_time_general']:
+        time_font = font_general
+
+    if force_bottom:
+        pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10 - stg['frame_size'], header_h + (i - scroll) * 74 - stg['frame_size'], stg['window_size_x'] - 20 + stg['frame_size'], 64 + stg['frame_size'] * 2))
+
+    if achbg_color != None:
+        max_val = 100.0
+        if stg['achbg_rarity_relative']:
+            max_val = max_rarity
+        length = stg['window_size_x'] - 84 - stg['frame_size']
+        if (stg['achbg_rarity'] == 'yes' or (stg['achbg_rarity'] == 'sort' and stg['sort_by_rarity'] and viewing == 'achs')) and achs_f[i].rarity != -1.0:
+            length = achs_f[i].rarity * (stg['window_size_x'] - 84 - stg['frame_size']) / max_val
+        pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll) * 74 - stg['frame_size'], length, 64 + stg['frame_size'] * 2))
+
+    long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), ach_text_color)
+    if not can_show_desc:
+        multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
+    elif achs_f[i].has_desc:
+        multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
+
+    prg_str_len = 0
+    if bar_shown and not hide_bar_and_time:
+        if achs_f[i].progress.support:
+            if not (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
+                prg_val = achs_f[i].progress.current_value
+                prg_no_min = achs_f[i].progress.get_without_min()
+                if prg_no_min[1] == 0:
+                    prg_no_min = (0, 1)
+                if stg['bar_ignore_min']:
+                    prg_val = achs_f[i].progress.real_value
+                    prg_no_min = (prg_val, achs_f[i].progress.max_val)
+            else:
+                prg_val = achs_f[i].progress.max_val
+                prg_no_min = (1, 1)
+            prg_str = f'{round_down(prg_val, 2)}/{achs_f[i].progress.max_val}'
+            if stg['bar_percentage'] != 'no':
+                bar_percentage = round_down(prg_no_min[0] / prg_no_min[1] * 100, 1) + '%'
+                if stg['bar_percentage'] == 'show':
+                    prg_str += f' ({bar_percentage})'
+                else:
+                    prg_str = bar_percentage
+        else:
+            prg_str = achs[i].progress.support_error
+            prg_no_min = (0, 1)
+            if stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned:
+                prg_no_min = (1, 1)
+        prg_str_len = time_font.size(prg_str)[0]
+
+    if achs_f[i].earned:
+        if stg['bar_unlocked'] == 'zerolen':
+            bar_length = -10
+
+        if stg['frame_size'] > 0:
+            frame_color = stg['frame_color_unlock']
+            if achs_f[i].rare:
+                frame_color = stg['frame_color_rare']
+            if hovered_over and stg['frame_color_hover'] != None:
+                frame_color = stg['frame_color_hover']
+            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
+        if achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
+            screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
+        else:
+            pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+        if stg['show_timestamps'] and not hide_bar_and_time:
+            if bar_shown:
+                show_text(screen, time_font, achs_f[i].get_time(stg), (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), time_color)
+            else:
+                show_text(screen, time_font, achs_f[i].get_time(stg), (84, header_h + 49 + (i - scroll) * 74), time_color)
+
+        # ach_time = achs_f[i].get_time()
+        # show_text(screen, font_regular, ach_time, (790 - font_regular.size(ach_time)[0] , 107 + (i - scroll) * 74))
+
+        # ach_time = achs_f[i].get_time()
+        # ach_time_len = font_regular.size(ach_time)
+        # rrect = pygame.Rect(0, 0, ach_time_len[0], ach_time_len[1])
+        # rrect.midright = (790, 90 + (i - scroll) * 74)
+        # show_text(screen, font_regular, ach_time, rrect)
+
+    else:
+        if stg['frame_size'] > 0:
+            frame_color = stg['frame_color_lock']
+            if achs_f[i].rare:
+                frame_color = stg['frame_color_rare_lock']
+            if hovered_over and stg['frame_color_hover'] != None:
+                frame_color = stg['frame_color_hover']
+            pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
+        if reveal_icon and achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
+            screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
+        elif achs_f[i].icon_gray != None and ach_icons[achs_f[i].icon_gray] != None:
+            screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
+        else:
+            pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+
+    if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
+        draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, prg_no_min[0], prg_no_min[1])
+        show_text(screen, time_font, prg_str, (bar_length + 94, header_h + 49 + (i - scroll) * 74), time_color)
+
 def draw_achs():
     screen.fill(stg['color_background'])
 
@@ -172,7 +585,7 @@ def draw_achs():
             screen.blit(listbutton, (stg['window_size_x'] - 32, 10))
         elif header_extra == 'search_results':
             draw_game_progress(btn_locs['filter_search'][state_filter].topleft[0] - 20)
-            screen.blit(filter_buttons[state_filter], btn_locs['filter'][state_filter])
+            screen.blit(filter_buttons[state_filter], btn_locs['filter_search'][state_filter])
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
         elif header_extra == 'sort':
             draw_game_progress(stg['window_size_x'] - 180)
@@ -210,163 +623,90 @@ def draw_achs():
 
     if len(achs_f) == 0:
         show_text(screen, font_general, 'No achievements found', (10, header_h), stg['color_text'])
-                
-    for i in range(scroll, scroll + achs_to_show + 1):
-        if i >= len(achs_f):
-            break
 
-        font_regular = font_achs_regular[achs_f[i].language]
-        font_small = font_achs_small[achs_f[i].language]
+    if grid_view:
+        for i in range(scroll, scroll + achs_to_show + stg['exp_grid_show_extra_line'] - stg['exp_grid_reserve_last_line']):
+            for j in range(achs_to_show_horiz):
+                idx = i * achs_to_show_horiz + j
+                if idx >= len(achs_f):
+                    break
+                ach = achs_f[idx]
+                ach_x = 10 + j * 74
+                ach_y = header_h + 74 * (i - scroll)
 
-        bar_length = stg['bar_length']
-
-        can_show_desc = not achs_f[i].hidden or (achs_f[i].earned and not hide_all_secrets) or reveal_secrets
-        long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
-
-        if achs_f[i].progress != None:
-            bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
-            bar_hidden_unsup = stg['bar_hide_unsupported'] == 'all' and not achs_f[i].progress.support
-            bar_hidden_unsup_st = stg['bar_hide_unsupported'] == 'stat' and not achs_f[i].progress.support_error in (None, "Unknown stat")
-            bar_hidden_secret = stg['bar_hide_secret'] and not can_show_desc
-            bar_shown = not (bar_hidden_unlock or bar_hidden_unsup or bar_hidden_unsup_st or bar_hidden_secret)
-        else:
-            bar_shown = False
-
-        hovered_over = hover_ach == i - scroll
-        hide_bar_and_time = hovered_over and long_desc
-
-        reveal_icon = stg['reveal_icons_hover'] and can_show_desc and hovered_over
-        reveal_icon = reveal_icon or (stg['reveal_icons_revsecr'] != 'never' and reveal_secrets and (hovered_over or stg['reveal_icons_revsecr'] == 'always'))
-
-        desc_max_lines = 3
-        if bar_shown or (achs_f[i].earned and stg['show_timestamps']):
-            desc_max_lines = 2
-        if hovered_over:
-            desc_max_lines = 3
-
-        achbg_color = None
-        ach_text_color = None
-        if achs_f[i].earned:
-            if achs_f[i].rare:
-                achbg_color = stg['color_achbg_rare']
-                ach_text_color = stg['color_text_rare']
-            else:
-                achbg_color = stg['color_achbg_unlock']
-                ach_text_color = stg['color_text_unlock']
-        else:
-            if achs_f[i].rare:
-                achbg_color = stg['color_achbg_rare_lock']
-                ach_text_color = stg['color_text_rare_lock']
-            else:
-                achbg_color = stg['color_achbg_lock']
-                ach_text_color = stg['color_text_lock']
-        if hovered_over:
-            if stg['color_achbg_hover'] != None:
-                achbg_color = stg['color_achbg_hover']
-            if stg['color_text_hover'] != None:
-                ach_text_color = stg['color_text_hover']
-
-        time_color = ach_text_color
-        time_font = font_regular
-        if stg['color_time_general']:
-            time_color = stg['color_text']
-        if stg['font_time_general']:
-            time_font = font_general
-
-        if achbg_color != None:
-            max_val = 100.0
-            if stg['achbg_rarity_relative']:
-                max_val = max_rarity
-            length = stg['window_size_x'] - 84 - stg['frame_size']
-            if (stg['achbg_rarity'] == 'yes' or (stg['achbg_rarity'] == 'sort' and stg['sort_by_rarity'] and viewing == 'achs')) and achs_f[i].rarity != -1.0:
-                length = achs_f[i].rarity * (stg['window_size_x'] - 84 - stg['frame_size']) / max_val
-            pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll) * 74 - stg['frame_size'], length, 64 + stg['frame_size'] * 2))
-
-        long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), ach_text_color)
-        if not can_show_desc:
-            multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
-        elif achs_f[i].has_desc:
-            multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, achs_f[i].description_l, (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
-
-        prg_str_len = 0
-        if bar_shown and not hide_bar_and_time:
-            if achs_f[i].progress.support:
-                if not (stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned):
-                    prg_val = achs_f[i].progress.current_value
-                    prg_no_min = achs_f[i].progress.get_without_min()
-                    if prg_no_min[1] == 0:
-                        prg_no_min = (0, 1)
-                    if stg['bar_ignore_min']:
-                        prg_val = achs_f[i].progress.real_value
-                        prg_no_min = (prg_val, achs_f[i].progress.max_val)
-                else:
-                    prg_val = achs_f[i].progress.max_val
-                    prg_no_min = (1, 1)
-                prg_str = f'{round_down(prg_val, 2)}/{achs_f[i].progress.max_val}'
-                if stg['bar_percentage'] != 'no':
-                    bar_percentage = round_down(prg_no_min[0] / prg_no_min[1] * 100, 1) + '%'
-                    if stg['bar_percentage'] == 'show':
-                        prg_str += f' ({bar_percentage})'
+                can_show_desc = not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets
+                if ach.name == 'A_MIGHTY_ANNIVERSARY': print(can_show_desc)
+                hovered_over = hover_ach == i - scroll and hover_ach_horiz == idx % achs_to_show_horiz
+                if ach.earned:
+                    if stg['frame_size'] > 0:
+                        frame_color = stg['frame_color_unlock']
+                        if ach.rare:
+                            frame_color = stg['frame_color_rare']
+                        if hovered_over and stg['frame_color_hover'] != None:
+                            frame_color = stg['frame_color_hover']
+                        pygame.draw.rect(screen, frame_color, pygame.Rect(ach_x - stg['frame_size'], ach_y - stg['frame_size'], 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
+                    if ach.icon != None and ach_icons[ach.icon] != None:
+                        screen.blit(ach_icons[ach.icon], (ach_x, ach_y))
                     else:
-                        prg_str = bar_percentage
-            else:
-                prg_str = achs[i].progress.support_error
-                prg_no_min = (0, 1)
-                if stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned:
-                    prg_no_min = (1, 1)
-            prg_str_len = time_font.size(prg_str)[0]
-
-        if achs_f[i].earned:
-            if stg['bar_unlocked'] == 'zerolen':
-                bar_length = -10
-
-            if stg['frame_size'] > 0:
-                frame_color = stg['frame_color_unlock']
-                if achs_f[i].rare:
-                    frame_color = stg['frame_color_rare']
-                if hovered_over and stg['frame_color_hover'] != None:
-                    frame_color = stg['frame_color_hover']
-                pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
-                screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
-            else:
-                pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
-            if stg['show_timestamps'] and not hide_bar_and_time:
-                if bar_shown:
-                    show_text(screen, time_font, achs_f[i].get_time(stg), (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), time_color)
+                        pygame.draw.rect(screen, stg['color_background'], pygame.Rect(ach_x, ach_y, 64, 64))
                 else:
-                    show_text(screen, time_font, achs_f[i].get_time(stg), (84, header_h + 49 + (i - scroll) * 74), time_color)
+                    reveal_icon = stg['reveal_icons_hover'] and can_show_desc and hovered_over
+                    reveal_icon = reveal_icon or (stg['reveal_icons_revsecr'] != 'never' and reveal_secrets and (hovered_over or stg['reveal_icons_revsecr'] == 'always'))
+                    if stg['frame_size'] > 0:
+                        frame_color = stg['frame_color_lock']
+                        if ach.rare:
+                            frame_color = stg['frame_color_rare_lock']
+                        if hovered_over and stg['frame_color_hover'] != None:
+                            frame_color = stg['frame_color_hover']
+                        pygame.draw.rect(screen, frame_color, pygame.Rect(ach_x - stg['frame_size'], ach_y - stg['frame_size'], 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
+                    if reveal_icon and ach.icon != None and ach_icons[ach.icon] != None:
+                        screen.blit(ach_icons[ach.icon], (ach_x, ach_y))
+                    elif ach.icon_gray != None and ach_icons[ach.icon_gray] != None:
+                        screen.blit(ach_icons[ach.icon_gray], (ach_x, ach_y))
+                    else:
+                        pygame.draw.rect(screen, stg['color_background'], pygame.Rect(ach_x, ach_y, 64, 64))
 
-            # ach_time = achs_f[i].get_time()
-            # show_text(screen, font_regular, ach_time, (790 - font_regular.size(ach_time)[0] , 107 + (i - scroll) * 74))
+                if ach.progress != None:
+                    bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and ach.earned
+                    bar_hidden_unsup = stg['bar_hide_unsupported'] == 'all' and not ach.progress.support
+                    bar_hidden_unsup_st = stg['bar_hide_unsupported'] == 'stat' and not ach.progress.support_error in (None, "Unknown stat")
+                    bar_hidden_secret = stg['bar_hide_secret'] and not can_show_desc
+                    bar_shown = not (bar_hidden_unlock or bar_hidden_unsup or bar_hidden_unsup_st or bar_hidden_secret)
+                else:
+                    bar_shown = False
+                if bar_shown and not (stg['exp_grid_bar_hover_hide'] and hovered_over):
+                    if ach.progress.support:
+                        if not (stg['bar_unlocked'] in ('full', 'zerolen') and ach.earned):
+                            prg_no_min = ach.progress.get_without_min()
+                            if prg_no_min[1] == 0:
+                                prg_no_min = (0, 1)
+                            if stg['bar_ignore_min']:
+                                prg_no_min = (prg_val, ach.progress.max_val)
+                        else:
+                            prg_no_min = (1, 1)
+                    else:
+                        prg_no_min = (0, 1)
+                        if stg['bar_unlocked'] in ('full', 'zerolen') and ach.earned:
+                            prg_no_min = (1, 1)
+                    draw_progressbar(ach_x, ach_y + 64 - stg['exp_grid_bar_height'], 64, stg['exp_grid_bar_height'], prg_no_min[0], prg_no_min[1])
 
-            # ach_time = achs_f[i].get_time()
-            # ach_time_len = font_regular.size(ach_time)
-            # rrect = pygame.Rect(0, 0, ach_time_len[0], ach_time_len[1])
-            # rrect.midright = (790, 90 + (i - scroll) * 74)
-            # show_text(screen, font_regular, ach_time, rrect)
+        if hover_ach_horiz != None and (scroll + hover_ach) * achs_to_show_horiz + hover_ach_horiz < len(achs_f):
+            draw_ach((scroll + hover_ach) * achs_to_show_horiz + hover_ach_horiz, True)
 
-        else:
-            if stg['frame_size'] > 0:
-                frame_color = stg['frame_color_lock']
-                if achs_f[i].rare:
-                    frame_color = stg['frame_color_rare_lock']
-                if hovered_over and stg['frame_color_hover'] != None:
-                    frame_color = stg['frame_color_hover']
-                pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if reveal_icon and achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
-                screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
-            elif achs_f[i].icon_gray != None and ach_icons[achs_f[i].icon_gray] != None:
-                screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
-            else:
-                pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+    for i in range(scroll, scroll + achs_to_show + 1):
+        if grid_view:
+            break
+        draw_ach(i)
 
-        if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
-            draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, prg_no_min[0], prg_no_min[1])
-            show_text(screen, time_font, prg_str, (bar_length + 94, header_h + 49 + (i - scroll) * 74), time_color)
-
-    if len(achs_f) > achs_to_show:
-        draw_scrollbar(scroll, len(achs_f) - achs_to_show, len(achs_f) * 74 - 10)
+    if not grid_view:
+        if len(achs_f) > achs_to_show:
+            draw_scrollbar(scroll, len(achs_f) - achs_to_show, len(achs_f) * 74 - 10)
+    else:
+        if get_grid_height() > (achs_to_show - stg['exp_grid_reserve_last_line']):
+            sh = None
+            if stg['exp_grid_reserve_last_line']:
+                sh = stg['window_size_y'] - header_h - 74
+            draw_scrollbar(scroll, get_grid_height() - (achs_to_show - stg['exp_grid_reserve_last_line']), get_grid_height() * 74 - 10, sh)
 
     pygame.display.flip()
 
@@ -377,7 +717,7 @@ def draw_stats():
     screen.blit(achsbutton, btn_locs['achs'])
 
     if len(stats) == 0:
-        show_text(screen, font_general, 'No stats found', (10, header_h))
+        show_text(screen, font_general, 'No stats found', (10, header_h), stg['color_text'])
 
     already_shown = 0 - scroll_stats
     for stat in stats.values():
@@ -407,7 +747,7 @@ def draw_history():
     screen.blit(unlocksbutton, btn_locs['history_unlocks'])
 
     if len(history) == 0:
-        show_text(screen, font_general, 'History is empty', (10, header_h))
+        show_text(screen, font_general, 'History is empty', (10, header_h), stg['color_text'])
 
     for i in range(scroll_history, min(scroll_history + achs_to_show + 1, len(history))):
 
@@ -560,6 +900,9 @@ def draw_history():
     pygame.display.flip()
 
 def ach_dumper():
+    if viewing == 'console_line':
+        return
+
     dump_time = datetime.now()
 
     text = appid
@@ -644,12 +987,17 @@ def ach_dumper():
         text += '\n'
         for s in stats:
             text += '\n' + stats[s].dname + ' = ' + str(stats[s].value)
+    elif viewing == 'console':
+        text = ''
+        text += '\n'.join(map(lambda x : x['text'], internal_console))
 
     filename = f"ach_dumper/{dump_time.strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}"
     if viewing == 'stats':
         filename += '_stats'
     elif viewing == 'history':
         filename += '_history'
+    elif viewing == 'console':
+        filename += '_console'
     elif state_filter == 1 or viewing == 'history_unlocks':
         filename += '_unlock'
     elif state_filter == 2:
@@ -666,826 +1014,892 @@ if len(sys.argv) > 1:
 else:
     appid, achdata_source, source_extra = load_game(input('Enter AppID: '))
 
-if not os.path.isdir('games'):
-    os.makedirs('games')
+def load_everything(reload=False, keep_data=False):
 
-stg = load_settings(appid, achdata_source)
-stg_ad = load_settings(appid, achdata_source, True)
+    if not os.path.isdir('games'):
+        os.makedirs('games')
 
-# min_size_x = 274
-min_size_x = 170
-min_size_y = 132
-# if stg['history_length'] < 0:
-    # min_size_x = 174
-if stg['gamebar_position'] == 'under':
-    min_size_y = 144
+    global stg
+    if not keep_data:
+        stg = load_settings(appid, achdata_source)
+        if reload:
+            stg.update(stg_to_keep)
+        stg_ad = load_settings(appid, achdata_source, True)
 
-if stg['window_size_x'] < min_size_x or stg['window_size_y'] < min_size_y:
-    print(f'Window size must be at least {min_size_x}x{min_size_y} with current settings')
-    sys.exit()
-if stg['bar_length'] == 0:
-    stg['bar_length'] = -10
-if stg['gamebar_length'] == 0:
-    stg['gamebar_length'] = -10
-if stg['frame_size'] > 5:
-    stg['frame_size'] = 5
-if stg['frame_color_rare'] == None:
-    stg['frame_color_rare'] = stg['frame_color_unlock']
-if stg['frame_color_rare_lock'] == None:
-    stg['frame_color_rare_lock'] = stg['frame_color_lock']
-if stg['color_achbg_rare'] == None:
-    stg['color_achbg_rare'] = stg['color_achbg_unlock']
-if stg['color_achbg_rare_lock'] == None:
-    stg['color_achbg_rare_lock'] = stg['color_achbg_lock']
-if stg['color_text_rare'] == None:
-    stg['color_text_rare'] = stg['color_text_unlock']
-if stg['color_text_rare_lock'] == None:
-    stg['color_text_rare_lock'] = stg['color_text_lock']
-if stg['color_bar_completed'] == None:
-    stg['color_bar_completed'] = stg['color_bar_fill']
-if len(stg['language']) == 0:
-    stg['language'].append('english')
-if stg['language_requests'] == None:
-    stg['language_requests'] = stg['language'][0]
+    # min_size_x = 274
+    min_size_x = 170
+    min_size_y = 132
+    # if stg['history_length'] < 0:
+        # min_size_x = 174
+    if stg['gamebar_position'] == 'under':
+        min_size_y = 144
 
-header_h = 58
-if stg['gamebar_position'] in ('repname', 'hide'):
-    header_h = 47
-elif stg['gamebar_position'] == 'under':
-    header_h = 70
-
-if achdata_source == 'steam':
-    if len(stg['api_key']) == 0:
-        print('An API key is required to track achievements from Steam')
+    if stg['window_size_x'] < min_size_x or stg['window_size_y'] < min_size_y:
+        print(f'Window size must be at least {min_size_x}x{min_size_y} with current settings')
         sys.exit()
-    # source_extra = check_alias(source_extra)
-    # if source_extra == None or not source_extra.isnumeric():
-        # print('Invalid Steam user ID')
-        # sys.exit()
+    if stg['bar_length'] == 0:
+        stg['bar_length'] = -10
+    if stg['gamebar_length'] == 0:
+        stg['gamebar_length'] = -10
+    if stg['frame_size'] > 5:
+        stg['frame_size'] = 5
+    if stg['frame_color_rare'] == None:
+        stg['frame_color_rare'] = stg['frame_color_unlock']
+    if stg['frame_color_rare_lock'] == None:
+        stg['frame_color_rare_lock'] = stg['frame_color_lock']
+    if stg['color_achbg_rare'] == None:
+        stg['color_achbg_rare'] = stg['color_achbg_unlock']
+    if stg['color_achbg_rare_lock'] == None:
+        stg['color_achbg_rare_lock'] = stg['color_achbg_lock']
+    if stg['color_text_rare'] == None:
+        stg['color_text_rare'] = stg['color_text_unlock']
+    if stg['color_text_rare_lock'] == None:
+        stg['color_text_rare_lock'] = stg['color_text_lock']
+    if stg['color_bar_completed'] == None:
+        stg['color_bar_completed'] = stg['color_bar_fill']
+    if len(stg['language']) == 0:
+        stg['language'].append('english')
+    if stg['language_requests'] == None:
+        stg['language_requests'] = stg['language'][0]
+    if stg['exp_grid_reserve_last_line']:
+        stg['exp_grid_show_extra_line'] = False
+        stg['exp_grid_empty_line'] = False
 
-url_random = randint(0, 10000000)
+    header_h = 58
+    if stg['gamebar_position'] in ('repname', 'hide'):
+        header_h = 47
+    elif stg['gamebar_position'] == 'under':
+        header_h = 70
 
-def generator_cleanup():
-    if os.path.isdir(f'{appid}_output'):
-        shutil.rmtree(f'{appid}_output')
-    elif os.path.isdir(f'output/{appid}'):
-        shutil.rmtree(f'output/{appid}')
-        if len(os.listdir('output')) == 0:
-            shutil.rmtree('output')
-    if os.path.isdir(f'backup/{appid}'):
-        shutil.rmtree(f'backup/{appid}')
-        if len(os.listdir('backup')) == 0:
-            shutil.rmtree('backup')
-    if os.path.isdir('login_temp'):
-        shutil.rmtree('login_temp')
+    if achdata_source == 'steam':
+        if len(stg['api_key']) == 0:
+            print('An API key is required to track achievements from Steam')
+            sys.exit()
+        # source_extra = check_alias(source_extra)
+        # if source_extra == None or not source_extra.isnumeric():
+            # print('Invalid Steam user ID')
+            # sys.exit()
 
-if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
-    interrupted_gen = False
-    if os.path.isdir(f'{appid}_output'):
-        interrupted_gen = True
-        cfg_format = 0
-        cfg_path = f'{appid}_output/steam_settings'
-    elif os.path.isdir(f'output/{appid}'):
-        interrupted_gen = True
-        cfg_format = 1
-        cfg_path = f'output/{appid}/steam_settings'
-    if interrupted_gen:
-        print(f'Found possibly incomplete auto-generated config: {cfg_path}')
-        cfg_achs = []
-        a_count = 0
-        s_count = 0
-        if os.path.isfile(f'{cfg_path}/achievements.json'):
-            with open(f'{cfg_path}/achievements.json') as f:
-                cfg_achs = json.load(f)
-                a_count = len(cfg_achs)
-        if os.path.isfile(f'{cfg_path}/stats.txt'):
-            with open(f'{cfg_path}/stats.txt') as f:
-                s_count = 0
-                for l in f.readlines():
-                    s_count += l.count('=') == 3
-        i_set = set()
-        for a in cfg_achs:
-            if 'icon' in a:
-                i_set.add(a['icon'])
-            if 'icon_gray' in a:
-                i_set.add(a['icon_gray'])
-        i_expected_count = len(i_set)
-        i_count = 0
-        i_missing = set()
-        for i in i_set:
-            if os.path.isfile(f'{cfg_path}/achievement_images/{i}') or os.path.isfile(f'{cfg_path}/{i}'):
-                i_count += 1
-            else:
-                i_missing.add(i)
-        print(f' - Achievements: {a_count}')
-        print(f' - Stats: {s_count}')
-        print(f' - Achievement icons: {i_count}/{i_expected_count}')
-        print('Press ENTER to use this config or write anything to discard it')
-        if i_count != i_expected_count:
-            print(f'({i_expected_count - i_count} icons will be downloaded)')
-        if input() == '':
+    global url_random
+    url_random = randint(0, 10000000)
+
+    def generator_cleanup():
+        if os.path.isdir(f'{appid}_output'):
+            shutil.rmtree(f'{appid}_output')
+        elif os.path.isdir(f'output/{appid}'):
+            shutil.rmtree(f'output/{appid}')
+            if len(os.listdir('output')) == 0:
+                shutil.rmtree('output')
+        if os.path.isdir(f'backup/{appid}'):
+            shutil.rmtree(f'backup/{appid}')
+            if len(os.listdir('backup')) == 0:
+                shutil.rmtree('backup')
+        if os.path.isdir('login_temp'):
+            shutil.rmtree('login_temp')
+
+    if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
+        interrupted_gen = False
+        if os.path.isdir(f'{appid}_output'):
+            interrupted_gen = True
+            cfg_format = 0
+            cfg_path = f'{appid}_output/steam_settings'
+        elif os.path.isdir(f'output/{appid}'):
+            interrupted_gen = True
+            cfg_format = 1
+            cfg_path = f'output/{appid}/steam_settings'
+        if interrupted_gen:
+            print(f'Found possibly incomplete auto-generated config: {cfg_path}')
+            cfg_achs = []
+            a_count = 0
+            s_count = 0
+            if os.path.isfile(f'{cfg_path}/achievements.json'):
+                with open(f'{cfg_path}/achievements.json') as f:
+                    cfg_achs = json.load(f)
+                    a_count = len(cfg_achs)
+            if os.path.isfile(f'{cfg_path}/stats.txt'):
+                with open(f'{cfg_path}/stats.txt') as f:
+                    s_count = 0
+                    for l in f.readlines():
+                        s_count += l.count('=') == 3
+            i_set = set()
+            for a in cfg_achs:
+                if 'icon' in a:
+                    i_set.add(a['icon'])
+                if 'icon_gray' in a:
+                    i_set.add(a['icon_gray'])
+            i_expected_count = len(i_set)
+            i_count = 0
+            i_missing = set()
+            for i in i_set:
+                if os.path.isfile(f'{cfg_path}/achievement_images/{i}') or os.path.isfile(f'{cfg_path}/{i}'):
+                    i_count += 1
+                else:
+                    i_missing.add(i)
+            print(f' - Achievements: {a_count}')
+            print(f' - Stats: {s_count}')
+            print(f' - Achievement icons: {i_count}/{i_expected_count}')
+            print('Press ENTER to use this config or write anything to discard it')
             if i_count != i_expected_count:
-                import urllib.request
-                base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
-                              'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
-                i_path = f'{cfg_path}/achievement_images'
-                if cfg_format == 1:
-                    i_path = f'{cfg_path}/img'
-                done = 0
-                total = i_expected_count - i_count
-                for i in i_missing:
+                print(f'({i_expected_count - i_count} icons will be downloaded)')
+            if input(show_output_lines = 5 + (i_count != i_expected_count)) == '':
+                if i_count != i_expected_count:
+                    import urllib.request
+                    base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
+                                  'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
+                    i_path = f'{cfg_path}/achievement_images'
                     if cfg_format == 1:
-                        i = i[4:]
-                    done += 1
-                    print(f'[{done}/{total}] {i}')
-                    success = False
-                    for u in range(len(base_urls)):
-                        url = base_urls[u] + appid + '/' + i
-                        try:
-                            urllib.request.urlretrieve(url, i_path + '/' + i)
-                            success = True
-                            break
-                        except Exception as ex:
-                            pass
-                    if not success:
-                        print('Failed to download icon. Restart to retry')
-                        input()
-                        sys.exit()
-            shutil.move(cfg_path, f'games/{appid}')
-        generator_cleanup()
+                        i_path = f'{cfg_path}/img'
+                    done = 0
+                    total = i_expected_count - i_count
+                    global screen_exists
+                    for i in i_missing:
+                        if screen_exists:
+                            for event in pygame.event.get():
+                                if event.type == pygame.QUIT:
+                                    sys.exit()
+                            draw_progressbar(0, stg['window_size_y'] - 10, stg['window_size_x'], 10, done, total)
+                            pygame.display.update(pygame.Rect(0, stg['window_size_y'] - 10, stg['window_size_x'], 10))
+                        if cfg_format == 1:
+                            i = i[4:]
+                        done += 1
+                        print(f'[{done}/{total}] {i}')
+                        success = False
+                        for u in range(len(base_urls)):
+                            url = base_urls[u] + appid + '/' + i
+                            try:
+                                urllib.request.urlretrieve(url, i_path + '/' + i)
+                                success = True
+                                break
+                            except Exception as ex:
+                                pass
+                        if not success:
+                            print('Failed to download icon. Restart to retry')
+                            input()
+                            sys.exit()
+                        for event in pygame.event.get():
+                            if event.type == pygame.QUIT:
+                                sys.exit()
+                shutil.move(cfg_path, f'games/{appid}')
+            generator_cleanup()
 
-    if not os.path.isdir(f'games/{appid}'):
-        command = '"' + os.path.abspath(stg['generator_path']) + '" ' + appid
-        if stg['generator_path'].endswith('.py'):
-            command = 'python ' + command
-        print('Generating game config...')
-        print('------------------------------')
-        exit_code = os.system(command)
-        print('------------------------------')
-        if exit_code == 0:
-            if os.path.isdir(f'{appid}_output/steam_settings'):
-                cfg_path = f'{appid}_output/steam_settings'
-            elif os.path.isdir(f'output/{appid}/steam_settings'):
-                cfg_path = f'output/{appid}/steam_settings'
-            shutil.move(cfg_path, f'games/{appid}')
-        else:
-            print('An error occurred. Press ENTER and restart to check if this config can be used or write anything to remove it')
-            if input() == '':
-                sys.exit()
-        generator_cleanup()
+        if not os.path.isdir(f'games/{appid}'):
+            command = '"' + os.path.abspath(stg['generator_path']) + '" ' + appid
+            if stg['generator_path'].endswith('.py'):
+                command = 'python ' + command
+            print('Generating game config...')
+            print('------------------------------')
+            exit_code = os.system(command)
+            print('------------------------------')
+            if exit_code == 0:
+                if os.path.isdir(f'{appid}_output/steam_settings'):
+                    cfg_path = f'{appid}_output/steam_settings'
+                elif os.path.isdir(f'output/{appid}/steam_settings'):
+                    cfg_path = f'output/{appid}/steam_settings'
+                shutil.move(cfg_path, f'games/{appid}')
+            else:
+                print('An error occurred. Press ENTER and restart to check if this config can be used or write anything to remove it')
+                if input(show_output_lines=1) == '':
+                    sys.exit()
+            generator_cleanup()
 
-    if not os.path.isdir(f'games/{appid}'):
-        print('Failed to generate config!')
-    elif os.path.isfile('games/alias.txt'):
-        try:
-            alias = input('Alias: ')
-        except RuntimeError:
-            alias = ''
-        if alias != '':
-            emu_info = appid + ' ' + input(f'Alias target: {appid} ')
-            emu_info = emu_info.rstrip()
-            with open('games/alias.txt') as f:
-                a = f.read().split('\n')
-            a.append(emu_info + '=' + alias)
-            with open('games/alias.txt', 'w') as f:
-                f.write('\n'.join(a))
-
-if 'LnzAch_gamename' in os.environ:
-    gamename = os.environ['LnzAch_gamename']
-else:
-    gamenames = {}
-    if os.path.isfile('games/games.json'):
-        with open('games/games.json') as f:
-            gamenames = json.load(f)
-    if appid in gamenames and stg['language_requests'] in gamenames[appid]:
-        gamename = gamenames[appid][stg['language_requests']]
-    else:
-        gamename = get_game_name(appid)
-    if gamename == appid:
-        steam_req = send_steam_request('appdetails', f"https://store.steampowered.com/api/appdetails?appids={appid}&l={stg['language_requests']}")
-        if steam_req != None:
-            gamename = steam_req[appid]['data']['name']
-            if not appid in gamenames:
-                gamenames[appid] = {}
-            gamenames[appid][stg['language_requests']] = gamename
-            with open('games/games.json', 'w') as f:
-                json.dump(gamenames, f, indent=4)
-
-ach_percentages = {}
-if stg['unlockrates'] != 'none' and os.path.isdir(f'games/{appid}'):
-    try:
-        with open(f'games/{appid}/unlockrates.json') as percentfile:
-            percentdata = json.load(percentfile)
-    except FileNotFoundError:
-        percentdata = None
-    if percentdata == None or time.time() >= percentdata['time'] + stg['unlockrates_expire']:
-        steam_req = send_steam_request('GetGlobalAchievementPercentagesForApp', f'https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid={appid}')
-        if steam_req != None:
+        if not os.path.isdir(f'games/{appid}'):
+            print('Failed to generate config!')
+        elif os.path.isfile('games/alias.txt'):
             try:
-                for p in steam_req['achievementpercentages']['achievements']:
-                    ach_percentages[p['name']] = p['percent']
-                with open(f'games/{appid}/unlockrates.json', 'w') as percentfile:
-                    json.dump({'time': time.time(), 'achievements': ach_percentages}, percentfile, indent=4)
-            except KeyError:
+                alias = input('Alias: ')
+            except RuntimeError:
+                alias = ''
+            if alias != '':
+                emu_info = appid + ' ' + input(f'Alias target: {appid} ')
+                emu_info = emu_info.rstrip()
+                with open('games/alias.txt') as f:
+                    a = f.read().split('\n')
+                a.append(emu_info + '=' + alias)
+                with open('games/alias.txt', 'w') as f:
+                    f.write('\n'.join(a))
+
+    if 'LnzAch_gamename' in os.environ:
+        gamename = os.environ['LnzAch_gamename']
+    else:
+        gamenames = {}
+        if os.path.isfile('games/games.json'):
+            with open('games/games.json') as f:
+                gamenames = json.load(f)
+        if appid in gamenames and stg['language_requests'] in gamenames[appid]:
+            gamename = gamenames[appid][stg['language_requests']]
+        else:
+            gamename = get_game_name(appid)
+        if gamename == appid:
+            steam_req = send_steam_request('appdetails', f"https://store.steampowered.com/api/appdetails?appids={appid}&l={stg['language_requests']}")
+            if steam_req != None:
+                gamename = steam_req[appid]['data']['name']
+                if not appid in gamenames:
+                    gamenames[appid] = {}
+                gamenames[appid][stg['language_requests']] = gamename
+                with open('games/games.json', 'w') as f:
+                    json.dump(gamenames, f, indent=4)
+
+    global ach_percentages
+    global stat_dnames
+    if not keep_data:
+        ach_percentages = {}
+        if stg['unlockrates'] != 'none' and os.path.isdir(f'games/{appid}'):
+            try:
+                with open(f'games/{appid}/unlockrates.json') as percentfile:
+                    percentdata = json.load(percentfile)
+            except FileNotFoundError:
+                percentdata = None
+            if percentdata == None or time.time() >= percentdata['time'] + stg['unlockrates_expire']:
+                steam_req = send_steam_request('GetGlobalAchievementPercentagesForApp', f'https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid={appid}')
+                if steam_req != None:
+                    try:
+                        for p in steam_req['achievementpercentages']['achievements']:
+                            ach_percentages[p['name']] = p['percent']
+                        with open(f'games/{appid}/unlockrates.json', 'w') as percentfile:
+                            json.dump({'time': time.time(), 'achievements': ach_percentages}, percentfile, indent=4)
+                    except KeyError:
+                        steam_req = None
+                if steam_req == None and percentdata != None:
+                    ach_percentages = percentdata['achievements']
+                elif steam_req == None:
+                    stg['unlockrates'] = 'none'
+            else:
+                ach_percentages = percentdata['achievements']
+
+        stat_dnames = {}
+        if stg['stat_display_names'] and os.path.isdir(f'games/{appid}'):
+            if not os.path.isfile(f'games/{appid}/statdisplay.json'):
                 steam_req = None
-        if steam_req == None and percentdata != None:
-            ach_percentages = percentdata['achievements']
-        elif steam_req == None:
-            stg['unlockrates'] = 'none'
+                if len(stg['api_key']) > 0:
+                    steam_req = send_steam_request('GetSchemaForGame', f"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid={appid}&key={stg['api_key']}&l={stg['language_requests']}")
+                if steam_req != None:
+                    with open(f'games/{appid}/statdisplay.json', 'w') as dname_file:
+                        try:
+                            for n in steam_req['game']['availableGameStats']['stats']:
+                                stat_dnames[n['name']] = n['displayName']
+                            json.dump(stat_dnames, dname_file, indent=4)
+                        except KeyError:
+                            dname_file.write('{}')
+            else:
+                with open(f'games/{appid}/statdisplay.json') as dname_file:
+                    stat_dnames = json.load(dname_file)
+
+    save_dir = get_save_dir(appid, achdata_source, source_extra)
+
+    # pygame.init()
+
+    pygame.display.set_caption(f'Achievements | {gamename}')
+    pygame.display.set_allow_screensaver(True)
+    screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+    screen_exists = True
+    achs_to_show = (stg['window_size_y'] - header_h + 10) // 74
+    if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
+        achs_to_show -= 1
+    achs_to_show_horiz = (stg['window_size_x'] - 10) // 74
+    if stg['window_size_x'] - 10 < achs_to_show_horiz * 74 + stg['frame_size']:
+        achs_to_show_horiz -= 1
+    stats_to_show = int(stg['window_size_y'] - header_h) // stg['font_line_distance_regular']
+    console_lines_to_show = stg['window_size_y'] // stg['font_line_distance_regular']
+    if not reload:
+        grid_view = stg['exp_grid_default']
+
+    global history
+    if reload:
+        global state_filter
+        global viewing
+        global reveal_secrets
+        global hide_all_secrets
     else:
-        ach_percentages = percentdata['achievements']
+        viewing = 'achs'
+        scroll = 0
+        scroll_stats = 0
+        scroll_history = 0
+        scroll_console = 0
+        state_filter = 0
+        history = []
+        header_extra = ''
+        search_request = ''
+        reveal_secrets = False
+        hide_all_secrets = False
 
-stat_dnames = {}
-if stg['stat_display_names'] and os.path.isdir(f'games/{appid}'):
-    if not os.path.isfile(f'games/{appid}/statdisplay.json'):
-        steam_req = None
-        if len(stg['api_key']) > 0:
-            steam_req = send_steam_request('GetSchemaForGame', f"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid={appid}&key={stg['api_key']}&l={stg['language_requests']}")
-        if steam_req != None:
-            with open(f'games/{appid}/statdisplay.json', 'w') as dname_file:
-                try:
-                    for n in steam_req['game']['availableGameStats']['stats']:
-                        stat_dnames[n['name']] = n['displayName']
-                    json.dump(stat_dnames, dname_file, indent=4)
-                except KeyError:
-                    dname_file.write('{}')
-    else:
-        with open(f'games/{appid}/statdisplay.json') as dname_file:
-            stat_dnames = json.load(dname_file)
+    def load_image(name):
+        for i in stg['images']:
+            p = os.path.join('images', i, name)
+            if os.path.isfile(p):
+                return pygame.image.load(p)
+        return pygame.image.load('images/' + name)
 
-save_dir = get_save_dir(appid, achdata_source, source_extra)
+    def button_location(img, next_btn=None):
+        if next_btn != None:
+            x = next_btn.topleft[0]
+        else:
+            x = stg['window_size_x']
+        x -= 10
+        x -= img.get_width()
+        return pygame.Rect(x, 10, img.get_width(), 22)
 
-pygame.init()
+    statsbutton = load_image('stats.png')
+    achsbutton = load_image('achs.png')
+    filter_buttons = [load_image('filter_all.png'), load_image('filter_unlock.png'), load_image('filter_lock.png')]
+    historybutton = load_image('history.png')
+    backbutton = load_image('back.png')
+    clearbutton = load_image('clear.png')
+    unlocksbutton = load_image('unlocks.png')
+    # notifsbutton = load_image('notifs.png')
+    unreadicon = load_image('unread.png')
+    unreadicon2 = load_image('unread2.png')
+    lockallicon = load_image('lock_all.png')
+    upbutton = load_image('up.png')
+    downbutton = load_image('down.png')
+    xbutton = load_image('x.png')
+    listbutton = load_image('list.png')
+    secretsbutton = load_image('sort_secrets.png')
+    percentsortbutton = {False: load_image('sort_percent0.png'), True: load_image('sort_percent1.png')}
+    uotbutton = {False: load_image('sort_uot0.png'), True: load_image('sort_uot1.png')}
+    timesortbutton = {False: load_image('sort_time0.png'), True: load_image('sort_time1.png')}
+    secretsNbutton = {False: load_image('sort_secrets_n0.png'), True: load_image('sort_secrets_n1.png')}
+    secretsHbutton = {False: load_image('sort_secrets_h0.png'), True: load_image('sort_secrets_h1.png')}
+    secretsBbutton = {False: load_image('sort_secrets_b0.png'), True: load_image('sort_secrets_b1.png')}
+    revealbutton = {False: load_image('sort_secrets_reveal0.png'), True: load_image('sort_secrets_reveal1.png')}
+    hidebutton = {False: load_image('sort_secrets_hideall0.png'), True: load_image('sort_secrets_hideall1.png')}
+    schemachangeicon = load_image('schema_change.png')
 
-pygame.display.set_caption(f'Achievements | {gamename}')
-pygame.display.set_allow_screensaver(True)
-screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
-achs_to_show = (stg['window_size_y'] - header_h + 10) // 74
-if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
-    achs_to_show -= 1
-stats_to_show = (stg['window_size_y'] - header_h) // stg['font_line_distance_regular']
+    btn_locs = {}
+    btn_locs['stats'] = button_location(statsbutton)
+    btn_locs['filter'] = [button_location(i, btn_locs['stats']) for i in filter_buttons]
+    btn_locs['history'] = [button_location(historybutton, i) for i in btn_locs['filter']]
+    btn_locs['achs'] = button_location(achsbutton)
+    btn_locs['back'] = button_location(backbutton)
+    btn_locs['clear'] = button_location(clearbutton, btn_locs['back'])
+    btn_locs['history_unlocks'] = button_location(unlocksbutton, btn_locs['clear'])
+    search_results_x_rect = pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22)
+    btn_locs['filter_search'] = [button_location(i, search_results_x_rect) for i in filter_buttons]
 
-viewing = 'achs'
-scroll = 0
-scroll_stats = 0
-scroll_history = 0
-state_filter = 0
-history = []
-header_extra = ''
-search_request = ''
-reveal_secrets = False
-hide_all_secrets = False
-
-def load_image(name):
-    for i in stg['images']:
-        p = os.path.join('images', i, name)
+    def load_sound(name):
+        vol = 1.0
+        name = name.rsplit(':', 1)
+        if len(name) > 1 and name[1].count('.') < 2 and name[1].replace('.', '').isnumeric():
+            vol = float(name[1])
+        name = name[0]
+            
+        if name == '':
+            return None
+        p = os.path.join('sounds', name)
         if os.path.isfile(p):
-            return pygame.image.load(p)
-    return pygame.image.load('images/' + name)
+            s = pygame.mixer.Sound(p)
+            s.set_volume(vol)
+            return s
+        else:
+            print(f'Sound file not found ({name})')
+     
+    sounds = {}
+    if stg['sound']:
+        sounds[0.5] = load_sound(stg['exp_sound_console'])
+        sounds[1] = load_sound(stg['sound_progress'])
+        sounds[2] = load_sound(stg['sound_unlock'])
+        sounds[3] = load_sound(stg['sound_rare'])
+        sounds[4] = load_sound(stg['sound_multi'])
+        sounds[5] = load_sound(stg['sound_complete'])
 
-def button_location(img, next_btn=None):
-    if next_btn != None:
-        x = next_btn.topleft[0]
-    else:
-        x = stg['window_size_x']
-    x -= 10
-    x -= img.get_width()
-    return pygame.Rect(x, 10, img.get_width(), 22)
+    global achs_json
+    if not keep_data:
+        try:
+            with open(f'games/{appid}/achievements.json') as achsfile:
+                achs_json = json.load(achsfile)
+        except FileNotFoundError:
+            achs_json = {}
 
-statsbutton = load_image('stats.png')
-achsbutton = load_image('achs.png')
-filter_buttons = [load_image('filter_all.png'), load_image('filter_unlock.png'), load_image('filter_lock.png')]
-historybutton = load_image('history.png')
-backbutton = load_image('back.png')
-clearbutton = load_image('clear.png')
-unlocksbutton = load_image('unlocks.png')
-# notifsbutton = load_image('notifs.png')
-unreadicon = load_image('unread.png')
-unreadicon2 = load_image('unread2.png')
-lockallicon = load_image('lock_all.png')
-upbutton = load_image('up.png')
-downbutton = load_image('down.png')
-xbutton = load_image('x.png')
-listbutton = load_image('list.png')
-secretsbutton = load_image('sort_secrets.png')
-percentsortbutton = {False: load_image('sort_percent0.png'), True: load_image('sort_percent1.png')}
-uotbutton = {False: load_image('sort_uot0.png'), True: load_image('sort_uot1.png')}
-timesortbutton = {False: load_image('sort_time0.png'), True: load_image('sort_time1.png')}
-secretsNbutton = {False: load_image('sort_secrets_n0.png'), True: load_image('sort_secrets_n1.png')}
-secretsHbutton = {False: load_image('sort_secrets_h0.png'), True: load_image('sort_secrets_h1.png')}
-secretsBbutton = {False: load_image('sort_secrets_b0.png'), True: load_image('sort_secrets_b1.png')}
-revealbutton = {False: load_image('sort_secrets_reveal0.png'), True: load_image('sort_secrets_reveal1.png')}
-hidebutton = {False: load_image('sort_secrets_hideall0.png'), True: load_image('sort_secrets_hideall1.png')}
-schemachangeicon = load_image('schema_change.png')
+    achs_crc32 = {}
+    if achdata_source == 'sse':
+        for a in achs_json:
+            achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
 
-btn_locs = {}
-btn_locs['stats'] = button_location(statsbutton)
-btn_locs['filter'] = [button_location(i, btn_locs['stats']) for i in filter_buttons]
-btn_locs['history'] = [button_location(historybutton, i) for i in btn_locs['filter']]
-btn_locs['achs'] = button_location(achsbutton)
-btn_locs['back'] = button_location(backbutton)
-btn_locs['clear'] = button_location(clearbutton, btn_locs['back'])
-btn_locs['history_unlocks'] = button_location(unlocksbutton, btn_locs['clear'])
-search_results_x_rect = pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22)
-btn_locs['filter_search'] = [button_location(i, search_results_x_rect) for i in filter_buttons]
+    global achieved_json
+    if not keep_data:
+        achieved_json = {}
+        if achdata_source != 'steam':
+            try:
+                m = 'rt'
+                if achdata_source == 'sse':
+                    m = 'rb'
+                with open(get_player_achs_path(achdata_source, appid, source_extra), m) as player_achsfile:
+                    if achdata_source == 'goldberg':
+                        achieved_json = json.load(player_achsfile)
+                    elif achdata_source in ('codex', 'ali213'):
+                        achieved_json = player_achsfile.read()
+                        achieved_json = convert_achs_format(achieved_json, achdata_source)
+                    elif achdata_source == 'sse':
+                        achieved_json = player_achsfile.read()
+                        achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
+            except FileNotFoundError:
+                pass
+            except Exception as ex:
+                print(f'Failed to read file (player achs) - {type(ex).__name__}')
+        else:
+            steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
+            if steam_req != None:
+                achieved_json = steam_req['playerstats']['achievements']
+                achieved_json = convert_achs_format(achieved_json, achdata_source)
 
-def load_sound(name):
-    vol = 1.0
-    name = name.rsplit(':', 1)
-    if len(name) > 1 and name[1].count('.') < 2 and name[1].replace('.', '').isnumeric():
-        vol = float(name[1])
-    name = name[0]
-        
-    if name == '':
-        return None
-    p = os.path.join('sounds', name)
-    if os.path.isfile(p):
-        s = pygame.mixer.Sound(p)
-        s.set_volume(vol)
-        return s
-    else:
-        print(f'Sound file not found ({name})')
- 
-sounds = {}
-if stg['sound']:
-    sounds[1] = load_sound(stg['sound_progress'])
-    sounds[2] = load_sound(stg['sound_unlock'])
-    sounds[3] = load_sound(stg['sound_rare'])
-    sounds[4] = load_sound(stg['sound_multi'])
-    sounds[5] = load_sound(stg['sound_complete'])
+    stats = {}
+    stats_crc32 = {}
+    increment_only_names = []
+    increment_only = {}
+    io_change = False
 
-try:
-    with open(f'games/{appid}/achievements.json') as achsfile:
-        achs_json = json.load(achsfile)
-except FileNotFoundError:
-    achs_json = {}
+    if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.txt'):
+        with open(f'games/{appid}/increment_only.txt') as iofile:
+            increment_only_names = iofile.read().split('\n')
+        if os.path.isfile(f'{save_dir}/{appid}_inc_only.json'):
+            with open(f'{save_dir}/{appid}_inc_only.json') as iofile:
+                increment_only = json.load(iofile)
 
-achs_crc32 = {}
-if achdata_source == 'sse':
-    for a in achs_json:
-        achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
-
-achieved_json = {}
-if achdata_source != 'steam':
     try:
+        with open(f'games/{appid}/stats.txt') as statslist:
+            statlines = statslist.read().split('\n')
+            for line in statlines:
+                linespl = line.split('=')
+                if len(linespl) == 3:
+                    locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
+                    locinfo['source_extra'] = source_extra
+                    if achdata_source == 'sse':
+                        c = zlib.crc32(bytes(linespl[0], 'utf-8'))
+                        stats_crc32[c] = linespl[0]
+                    stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
+
+                    if stats[linespl[0]].inc_only:
+                        if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
+                            increment_only[linespl[0]] = stats[linespl[0]].value
+                            io_change = True
+                        elif stats[linespl[0]].value < increment_only[linespl[0]]:
+                            stats[linespl[0]].value = increment_only[linespl[0]]
+    except FileNotFoundError:
+        pass
+
+    def load_stats():
+        global stats_path, stats_last_change, io_change
         m = 'rt'
         if achdata_source == 'sse':
             m = 'rb'
-        with open(get_player_achs_path(achdata_source, appid, source_extra), m) as player_achsfile:
-            if achdata_source == 'goldberg':
-                achieved_json = json.load(player_achsfile)
-            elif achdata_source in ('codex', 'ali213'):
-                achieved_json = player_achsfile.read()
-                achieved_json = convert_achs_format(achieved_json, achdata_source)
-            elif achdata_source == 'sse':
-                achieved_json = player_achsfile.read()
-                achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
-    except FileNotFoundError:
-        pass
-    except Exception as ex:
-        print(f'Failed to read file (player achs) - {type(ex).__name__}')
-else:
-    steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
-    if steam_req != None:
-        achieved_json = steam_req['playerstats']['achievements']
-        achieved_json = convert_achs_format(achieved_json, achdata_source)
+        statsdata = {}
+        try:
+            stamp = os.stat(stats_path).st_mtime
+            if stamp == stats_last_change:
+                return False
+            stats_last_change = stamp
+            with open(stats_path, m) as statsfile:
+                statsdata = statsfile.read()
+            statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
+        except FileNotFoundError:
+            stats_last_change = None
+        except Exception as ex:
+            stats_last_change = 'Retry'
+            print(f'Failed to load stats - {type(ex).__name__}')
+        stats_changed = False
+        for stat in stats:
+            if stat in statsdata:
+                new = statsdata[stat]
+            else:
+                new = stats[stat].default
+            showing_older_io_val = stats[stat].value != stats[stat].real_value
+            if stats[stat].set_val(new):
+                stats_changed = True
+                if stats[stat].inc_only:
+                    increment_only[stat] = stats[stat].value
+                    io_change = True
+            if showing_older_io_val != (stats[stat].value != stats[stat].real_value):
+                global flip_required
+                flip_required = True
 
-stats = {}
-stats_crc32 = {}
-increment_only_names = []
-increment_only = {}
-io_change = False
+        return stats_changed
 
-if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.txt'):
-    with open(f'games/{appid}/increment_only.txt') as iofile:
-        increment_only_names = iofile.read().split('\n')
-    if os.path.isfile(f'{save_dir}/{appid}_inc_only.json'):
-        with open(f'{save_dir}/{appid}_inc_only.json') as iofile:
-            increment_only = json.load(iofile)
-
-try:
-    with open(f'games/{appid}/stats.txt') as statslist:
-        statlines = statslist.read().split('\n')
-        for line in statlines:
-            linespl = line.split('=')
-            if len(linespl) == 3:
-                locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
-                locinfo['source_extra'] = source_extra
-                if achdata_source == 'sse':
-                    c = zlib.crc32(bytes(linespl[0], 'utf-8'))
-                    stats_crc32[c] = linespl[0]
-                stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
-
-                if stats[linespl[0]].inc_only:
-                    if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
-                        increment_only[linespl[0]] = stats[linespl[0]].value
-                        io_change = True
-                    elif stats[linespl[0]].value < increment_only[linespl[0]]:
-                        stats[linespl[0]].value = increment_only[linespl[0]]
-except FileNotFoundError:
-    pass
-
-def load_stats():
-    global stats_last_change, io_change
-    m = 'rt'
-    if achdata_source == 'sse':
-        m = 'rb'
-    statsdata = {}
-    try:
-        stamp = os.stat(stats_path).st_mtime
-        if stamp == stats_last_change:
-            return False
-        stats_last_change = stamp
-        with open(stats_path, m) as statsfile:
-            statsdata = statsfile.read()
-        statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
-    except FileNotFoundError:
-        stats_last_change = None
-    except Exception as ex:
-        stats_last_change = 'Retry'
-        print(f'Failed to load stats - {type(ex).__name__}')
-    stats_changed = False
-    for stat in stats:
-        if stat in statsdata:
-            new = statsdata[stat]
+    def get_stat_last_change(name):
+        if achdata_source == 'goldberg':
+            return stats[name].fchecker.last_check
+        elif achdata_source == 'steam':
+            return time.time()
         else:
-            new = stats[stat].default
-        showing_older_io_val = stats[stat].value != stats[stat].real_value
-        if stats[stat].set_val(new):
-            stats_changed = True
-            if stats[stat].inc_only:
-                increment_only[stat] = stats[stat].value
-                io_change = True
-        if showing_older_io_val != (stats[stat].value != stats[stat].real_value):
-            global flip_required
-            flip_required = True
+            return stats_last_change
 
-    return stats_changed
+    if achdata_source == 'steam' and len(stats) > 0:
+        steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
+        if steam_req != None and 'stats' in steam_req['playerstats']:
+            for s in steam_req['playerstats']['stats']:
+                if s['name'] in stats:
+                    stats[s['name']].value = s['value']
+    elif achdata_source != 'goldberg' and len(stats) > 0:
+        global stats_path, stats_last_change
+        stats_path = get_stats_path(achdata_source, appid, source_extra)
+        stats_last_change = -1.0
+        load_stats()
 
-def get_stat_last_change(name):
-    if achdata_source == 'goldberg':
-        return stats[name].fchecker.last_check
-    elif achdata_source == 'steam':
-        return time.time()
-    else:
-        return stats_last_change
+    global achs
+    achs = []
+    for ach in achs_json:
+        achs.append(Achievement(ach, achieved_json, stats, ach_percentages, stg))
 
-if achdata_source == 'steam' and len(stats) > 0:
-    steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
-    if steam_req != None and 'stats' in steam_req['playerstats']:
-        for s in steam_req['playerstats']['stats']:
-            if s['name'] in stats:
-                stats[s['name']].value = s['value']
-elif achdata_source != 'goldberg' and len(stats) > 0:
-    stats_path = get_stats_path(achdata_source, appid, source_extra)
-    stats_last_change = -1.0
-    load_stats()
+    global ach_idxs
+    ach_idxs = {}
+    ach_icons = {}
+    achs_unlocked = 0
+    languages_used = set(['english'])
+    max_rarity = -1.0
 
-achs = []
-for ach in achs_json:
-    achs.append(Achievement(ach, achieved_json, stats, ach_percentages, stg))
+    force_unlocks = {}
+    if stg['forced_keep'] == 'save':
+        try:
+            with open(f'{save_dir}/{appid}_force.json') as forcefile:
+                force_unlocks = json.load(forcefile)
+        except FileNotFoundError:
+            pass
+    saved_tstamps = {}
+    if stg['save_timestamps']:
+        try:
+            with open(f'{save_dir}/{appid}_time.json') as timefile:
+                saved_tstamps = json.load(timefile)
+        except FileNotFoundError:
+            pass
 
-ach_idxs = {}
-ach_icons = {}
-achs_unlocked = 0
-languages_used = set(['english'])
-max_rarity = -1.0
-
-force_unlocks = {}
-if stg['forced_keep'] == 'save':
-    try:
-        with open(f'{save_dir}/{appid}_force.json') as forcefile:
-            force_unlocks = json.load(forcefile)
-    except FileNotFoundError:
-        pass
-saved_tstamps = {}
-if stg['save_timestamps']:
-    try:
-        with open(f'{save_dir}/{appid}_time.json') as timefile:
-            saved_tstamps = json.load(timefile)
-    except FileNotFoundError:
-        pass
-
-config_from_fork = os.path.isdir(f'games/{appid}/img')
-icons_path = f'games/{appid}/achievement_images'
-if config_from_fork:
-    icons_path = f'games/{appid}/img'
-
-fu_change = False
-ts_change = False
-ts_lost = False
-for i in range(len(achs)):
-    ach_idxs[achs[i].name] = i
-
+    config_from_fork = os.path.isdir(f'games/{appid}/img')
+    icons_path = f'games/{appid}/achievement_images'
     if config_from_fork:
-        if achs[i].icon != None and achs[i].icon[:4] =='img/':
-            achs[i].icon = achs[i].icon[4:]
-        if achs[i].icon_gray != None and achs[i].icon_gray[:4] =='img/':
-            achs[i].icon_gray = achs[i].icon_gray[4:]
-    if achs[i].icon != None and not achs[i].icon in ach_icons:
-        try:
-            ach_icons[achs[i].icon] = pygame.image.load(os.path.join(icons_path, achs[i].icon))
-        except pygame.error:
-            ach_icons[achs[i].icon] = None
-    if achs[i].icon_gray != None and not achs[i].icon_gray in ach_icons:
-        try:
-            ach_icons[achs[i].icon_gray] = pygame.image.load(os.path.join(icons_path, achs[i].icon_gray))
-        except pygame.error:
-            ach_icons[achs[i].icon_gray] = None
+        icons_path = f'games/{appid}/img'
 
-    languages_used.add(achs[i].language)
+    fu_change = False
+    ts_change = False
+    ts_lost = False
+    for i in range(len(achs)):
+        ach_idxs[achs[i].name] = i
 
-    if achs[i].earned_time == 'stat_last_change':
-        achs[i].earned_time, achs[i].ts_first, achs[i].ts_earliest = [get_stat_last_change(achs[i].progress.value['operand1'])] * 3
+        if config_from_fork:
+            if achs[i].icon != None and achs[i].icon[:4] =='img/':
+                achs[i].icon = achs[i].icon[4:]
+            if achs[i].icon_gray != None and achs[i].icon_gray[:4] =='img/':
+                achs[i].icon_gray = achs[i].icon_gray[4:]
+        if achs[i].icon != None and not achs[i].icon in ach_icons:
+            try:
+                ach_icons[achs[i].icon] = pygame.image.load(os.path.join(icons_path, achs[i].icon))
+            except pygame.error:
+                ach_icons[achs[i].icon] = None
+        if achs[i].icon_gray != None and not achs[i].icon_gray in ach_icons:
+            try:
+                ach_icons[achs[i].icon_gray] = pygame.image.load(os.path.join(icons_path, achs[i].icon_gray))
+            except pygame.error:
+                ach_icons[achs[i].icon_gray] = None
 
-    if achs[i].name in force_unlocks:
-        if not achs[i].earned or achs[i].force_unlock:
-            achs[i].earned = True
-            achs[i].force_unlock = True
-            achs[i].ts_first = None
-            achs[i].ts_earliest = None
-            achs[i].update_time(force_unlocks[achs[i].name])
-        else:
-            force_unlocks.pop(achs[i].name)
+        languages_used.add(achs[i].language)
+
+        if achs[i].earned_time == 'stat_last_change':
+            achs[i].earned_time, achs[i].ts_first, achs[i].ts_earliest = [get_stat_last_change(achs[i].progress.value['operand1'])] * 3
+
+        if achs[i].name in force_unlocks:
+            if not achs[i].earned or achs[i].force_unlock:
+                achs[i].earned = True
+                achs[i].force_unlock = True
+                achs[i].ts_first = None
+                achs[i].ts_earliest = None
+                achs[i].update_time(force_unlocks[achs[i].name])
+            else:
+                force_unlocks.pop(achs[i].name)
+                fu_change = True
+        if achs[i].force_unlock and not achs[i].name in force_unlocks:
+            force_unlocks[achs[i].name] = achs[i].earned_time
             fu_change = True
-    if achs[i].force_unlock and not achs[i].name in force_unlocks:
-        force_unlocks[achs[i].name] = achs[i].earned_time
-        fu_change = True
 
-    if achs[i].earned:
-        achs_unlocked += 1
+        if achs[i].earned:
+            achs_unlocked += 1
 
-    if achs[i].name in saved_tstamps:
-        if not stg['savetime_keep_locked'] and not achs[i].earned:
-            if saved_tstamps[achs[i].name]['first'] != None or saved_tstamps[achs[i].name]['earliest'] != None:
+        if achs[i].name in saved_tstamps:
+            if not stg['savetime_keep_locked'] and not achs[i].earned:
+                if saved_tstamps[achs[i].name]['first'] != None or saved_tstamps[achs[i].name]['earliest'] != None:
+                    ts_change = True
+                    ts_lost = True
+                saved_tstamps[achs[i].name]['first'] = None
+                saved_tstamps[achs[i].name]['earliest'] = None
+            if saved_tstamps[achs[i].name]['first'] != None:
+                achs[i].ts_first = saved_tstamps[achs[i].name]['first']
+            elif achs[i].earned:
+                saved_tstamps[achs[i].name]['first'] = achs[i].earned_time
                 ts_change = True
-                ts_lost = True
-            saved_tstamps[achs[i].name]['first'] = None
-            saved_tstamps[achs[i].name]['earliest'] = None
-        if saved_tstamps[achs[i].name]['first'] != None:
-            achs[i].ts_first = saved_tstamps[achs[i].name]['first']
-        elif achs[i].earned:
-            saved_tstamps[achs[i].name]['first'] = achs[i].earned_time
-            ts_change = True
-        if saved_tstamps[achs[i].name]['earliest'] != None:
-            if not achs[i].earned or saved_tstamps[achs[i].name]['earliest'] < achs[i].earned_time:
-                achs[i].ts_earliest = saved_tstamps[achs[i].name]['earliest']
-            elif achs[i].earned_time < saved_tstamps[achs[i].name]['earliest']:
-                saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
+            if saved_tstamps[achs[i].name]['earliest'] != None:
+                if not achs[i].earned or saved_tstamps[achs[i].name]['earliest'] < achs[i].earned_time:
+                    achs[i].ts_earliest = saved_tstamps[achs[i].name]['earliest']
+                elif achs[i].earned_time < saved_tstamps[achs[i].name]['earliest']:
+                    saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
+                    ts_change = True
+            elif achs[i].earned:
+                saved_tstamps[achs[i].name]['earliest'] = achs[i].earned_time
                 ts_change = True
-        elif achs[i].earned:
-            saved_tstamps[achs[i].name]['earliest'] = achs[i].earned_time
-            ts_change = True
-    else:
-        saved_tstamps[achs[i].name] = {}
-        saved_tstamps[achs[i].name]['first'] = achs[i].ts_first
-        saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
-        ts_change = True
-
-    if achs[i].rarity > 0:
-        max_rarity = max(achs[i].rarity, max_rarity)
-
-if fu_change and stg['forced_keep'] == 'save':
-    if not os.path.isdir(save_dir):
-        os.makedirs(save_dir)
-    with open(f'{save_dir}/{appid}_force.json', 'w') as forcefile:
-        json.dump(force_unlocks, forcefile, indent=4)
-if ts_change and stg['save_timestamps']:
-    if not os.path.isdir(save_dir):
-        os.makedirs(save_dir)
-    if ts_lost and os.path.isfile(f'{save_dir}/{appid}_time.json'):
-        n = f"save/time_backup/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}.json"
-        if not os.path.isdir('save/time_backup'):
-            os.makedirs('save/time_backup')
-        shutil.copy(f'{save_dir}/{appid}_time.json', n)
-    with open(f'{save_dir}/{appid}_time.json', 'w') as timefile:
-        json.dump(saved_tstamps, timefile, indent=4)
-if io_change:
-    if not os.path.isdir(save_dir):
-        os.makedirs(save_dir)
-    with open(f'{save_dir}/{appid}_inc_only.json', 'w') as iofile:
-        json.dump(increment_only, iofile, indent=4)
-if os.path.isdir(save_dir) and isinstance(source_extra, str) and source_extra[:5] == 'path:':
-    with open(f'{save_dir}/path.txt', 'w') as pathfile:
-        pathfile.write(source_extra[5:])
-
-for i in ach_icons:
-    if ach_icons[i] == None: continue
-    size = (ach_icons[i].get_width(), ach_icons[i].get_height())
-    if size != (64, 64):
-        if stg['smooth_scale']:
-            ach_icons[i] = pygame.transform.smoothscale(ach_icons[i].convert_alpha(), (64, 64))
         else:
-            ach_icons[i] = pygame.transform.scale(ach_icons[i], (64, 64))
+            saved_tstamps[achs[i].name] = {}
+            saved_tstamps[achs[i].name]['first'] = achs[i].ts_first
+            saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
+            ts_change = True
 
-if platform.uname().system == 'Windows' and stg['notif_icons'] and stg['notif_icons_no_ico'] != 'ignore':
-    icons_not_conv = 0
+        if achs[i].rarity > 0:
+            max_rarity = max(achs[i].rarity, max_rarity)
+
+    if fu_change and stg['forced_keep'] == 'save':
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        with open(f'{save_dir}/{appid}_force.json', 'w') as forcefile:
+            json.dump(force_unlocks, forcefile, indent=4)
+    if ts_change and stg['save_timestamps']:
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        if ts_lost and os.path.isfile(f'{save_dir}/{appid}_time.json'):
+            n = f"save/time_backup/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}.json"
+            if not os.path.isdir('save/time_backup'):
+                os.makedirs('save/time_backup')
+            shutil.copy(f'{save_dir}/{appid}_time.json', n)
+        with open(f'{save_dir}/{appid}_time.json', 'w') as timefile:
+            json.dump(saved_tstamps, timefile, indent=4)
+    if io_change:
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        with open(f'{save_dir}/{appid}_inc_only.json', 'w') as iofile:
+            json.dump(increment_only, iofile, indent=4)
+    if os.path.isdir(save_dir) and isinstance(source_extra, str) and source_extra[:5] == 'path:':
+        with open(f'{save_dir}/path.txt', 'w') as pathfile:
+            pathfile.write(source_extra[5:])
+
     for i in ach_icons:
         if ach_icons[i] == None: continue
-        if not os.path.isfile(os.path.join(icons_path, 'ico', i + '.ico')):
-            icons_not_conv += 1
-    if icons_not_conv > 0:
-        print('Icons not converted:', icons_not_conv)
-        if stg['notif_icons_no_ico'] == 'convert':
-            print('------------------------------')
-            if os.path.isfile('icon_converter.py'):
-                os.system(f'python icon_converter.py {appid} -s')
-            elif os.path.isfile('icon_converter.exe'):
-                os.system(f'icon_converter.exe {appid} -s')
+        size = (ach_icons[i].get_width(), ach_icons[i].get_height())
+        if size != (64, 64):
+            if stg['smooth_scale']:
+                ach_icons[i] = pygame.transform.smoothscale(ach_icons[i].convert_alpha(), (64, 64))
             else:
-                print('Icon converter not found')
-            print('------------------------------')
+                ach_icons[i] = pygame.transform.scale(ach_icons[i], (64, 64))
 
-ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
+    if platform.uname().system == 'Windows' and stg['notif_icons'] and stg['notif_icons_no_ico'] != 'ignore':
+        icons_not_conv = 0
+        for i in ach_icons:
+            if ach_icons[i] == None: continue
+            if not os.path.isfile(os.path.join(icons_path, 'ico', i + '.ico')):
+                icons_not_conv += 1
+        if icons_not_conv > 0:
+            print('Icons not converted:', icons_not_conv)
+            if stg['notif_icons_no_ico'] == 'convert':
+                print('------------------------------')
+                if os.path.isfile('icon_converter.py'):
+                    os.system(f'python icon_converter.py {appid} -s')
+                elif os.path.isfile('icon_converter.exe'):
+                    os.system(f'icon_converter.exe {appid} -s')
+                else:
+                    print('Icon converter not found')
+                print('------------------------------')
 
-font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
-font_achs_regular = {}
-font_achs_small = {}
-long_hidden_desc = {}
-for l in languages_used:
-    try:
-        font_names = [None, None]
-        if l in stg['font_achs']:
-            font_names[0] = stg['font_achs'][l]
+    ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
+
+    font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
+    font_achs_regular = {}
+    font_achs_small = {}
+    long_hidden_desc = {}
+    for l in languages_used:
+        try:
+            font_names = [None, None]
+            if l in stg['font_achs']:
+                font_names[0] = stg['font_achs'][l]
+            else:
+                font_names[0] = stg['font_achs']['all']
+            if l in stg['font_achs_desc']:
+                font_names[1] = stg['font_achs_desc'][l]
+            elif 'all' in stg['font_achs_desc']:
+                font_names[1] = stg['font_achs_desc']['all']
+            else:
+                font_names[1] = font_names[0]
+
+            font_sizes = [None, None]
+            if font_names[0] in stg['font_size_regular']:
+                font_sizes[0] = stg['font_size_regular'][font_names[0]]
+            elif 'all' in stg['font_size_regular']:
+                font_sizes[0] = stg['font_size_regular']['all']
+            if font_names[1] in stg['font_size_small']:
+                font_sizes[1] = stg['font_size_small'][font_names[1]]
+            elif 'all' in stg['font_size_small']:
+                font_sizes[1] = stg['font_size_small']['all']
+            font_achs_regular[l] = pygame.font.Font(os.path.join('fonts', font_names[0]), int(font_sizes[0]))
+            font_achs_small[l] = pygame.font.Font(os.path.join('fonts', font_names[1]), int(font_sizes[1]))
+            long_hidden_desc[l] = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[l], stg['hidden_desc'], None, (0, 0, 0), True)
+        except FileNotFoundError:
+            print(f'Font file not found ({l})')
+            sys.exit()
+
+    for ach in achs:
+        if ach.has_desc:
+            ach.long_desc = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[ach.language], ach.description_l, None, (0, 0, 0), True)
+        if ach.rarity == -1.0:
+            continue
+        if stg['unlockrates'] == 'name':
+            ach.display_name_l = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[ach.language].size(ach.rarity_text)[0], font_achs_regular[ach.language], ach.display_name_l, None, (0, 0, 0), True)
+            ach.display_name_l += ach.rarity_text
+        elif stg['unlockrates'] == 'desc':
+            ach.description_l += ach.rarity_text
+
+    achs_f = filter_achs(achs, state_filter, stg)
+
+    hover_ach = None
+    hover_ach_horiz = None
+    running = True
+    flip_required = True
+    filter_needed = False
+    if reload:
+        filter_needed = True
+    last_update = time.time()
+    fchecker_achieved_locinfo = {'source': achdata_source, 'appid': appid}
+    fchecker_achieved_locinfo['source_extra'] = source_extra
+    fchecker_achieved = None
+    if achdata_source != 'steam':
+        fchecker_achieved = FileChecker('player_achs', fchecker_achieved_locinfo, stg['delay_read_change'])
+    stats_delay_counter = 0
+    mouse_scrolling = False
+    steam_requests_data = {'achievements': None, 'stats': None}
+    steam_requests_state = {'achievements': -1, 'stats': -1}
+    steam_requests_time = {'achievements': time.time(), 'stats': time.time()}
+
+    def steam_update(reqtype):
+        global steam_requests_state
+        global steam_requests_data
+        steam_requests_state[reqtype] = 0
+        steam_requests_time[reqtype] = time.time()
+        if reqtype == 'achievements':
+            steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
+        if reqtype == 'stats':
+            steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
+        if steam_req != None:
+            if steam_req != steam_requests_data[reqtype]:
+                steam_requests_data[reqtype] = steam_req
+                steam_requests_state[reqtype] = 1
+            else:
+                steam_requests_state[reqtype] = 2
         else:
-            font_names[0] = stg['font_achs']['all']
-        if l in stg['font_achs_desc']:
-            font_names[1] = stg['font_achs_desc'][l]
-        elif 'all' in stg['font_achs_desc']:
-            font_names[1] = stg['font_achs_desc']['all']
-        else:
-            font_names[1] = font_names[0]
+            steam_requests_state[reqtype] = -1
 
-        font_sizes = [None, None]
-        if font_names[0] in stg['font_size_regular']:
-            font_sizes[0] = stg['font_size_regular'][font_names[0]]
-        elif 'all' in stg['font_size_regular']:
-            font_sizes[0] = stg['font_size_regular']['all']
-        if font_names[1] in stg['font_size_small']:
-            font_sizes[1] = stg['font_size_small'][font_names[1]]
-        elif 'all' in stg['font_size_small']:
-            font_sizes[1] = stg['font_size_small']['all']
-        font_achs_regular[l] = pygame.font.Font(os.path.join('fonts', font_names[0]), int(font_sizes[0]))
-        font_achs_small[l] = pygame.font.Font(os.path.join('fonts', font_names[1]), int(font_sizes[1]))
-        long_hidden_desc[l] = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[l], stg['hidden_desc'], None, (0, 0, 0), True)
-    except FileNotFoundError:
-        print(f'Font file not found ({l})')
-        sys.exit()
-
-for ach in achs:
-    if ach.has_desc:
-        ach.long_desc = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[ach.language], ach.description_l, None, (0, 0, 0), True)
-    if ach.rarity == -1.0:
-        continue
-    if stg['unlockrates'] == 'name':
-        ach.display_name_l = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[ach.language].size(ach.rarity_text)[0], font_achs_regular[ach.language], ach.display_name_l, None, (0, 0, 0), True)
-        ach.display_name_l += ach.rarity_text
-    elif stg['unlockrates'] == 'desc':
-        ach.description_l += ach.rarity_text
-
-achs_f = filter_achs(achs, state_filter, stg)
-
-hover_ach = None
-running = True
-flip_required = True
-filter_needed = False
-last_update = time.time()
-fchecker_achieved_locinfo = {'source': achdata_source, 'appid': appid}
-fchecker_achieved_locinfo['source_extra'] = source_extra
-fchecker_achieved = None
-if achdata_source != 'steam':
-    fchecker_achieved = FileChecker('player_achs', fchecker_achieved_locinfo, stg['delay_read_change'])
-stats_delay_counter = 0
-mouse_scrolling = False
-steam_requests_data = {'achievements': None, 'stats': None}
-steam_requests_state = {'achievements': -1, 'stats': -1}
-steam_requests_time = {'achievements': time.time(), 'stats': time.time()}
-
-def steam_update(reqtype):
-    global steam_requests_state
-    global steam_requests_data
-    steam_requests_state[reqtype] = 0
-    steam_requests_time[reqtype] = time.time()
-    if reqtype == 'achievements':
-        steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
-    if reqtype == 'stats':
-        steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
-    if steam_req != None:
-        if steam_req != steam_requests_data[reqtype]:
-            steam_requests_data[reqtype] = steam_req
-            steam_requests_state[reqtype] = 1
-        else:
-            steam_requests_state[reqtype] = 2
-    else:
-        steam_requests_state[reqtype] = -1
-
-def check_search_match(ach, rq):
-    if ach.icon_gray == 'hidden_dummy_ach_icon':
-        return stg['secrets'] == 'bottom'
-    if rq == '#hidden':
-        return ach.hidden
-    elif rq == '#not_hidden':
-        return not ach.hidden
-    elif rq == '#progress':
-        return ach.progress != None
-    rq = rq.lower()
-    if rq in ach.display_name_np.lower():
-        return True
-    if ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
-        d = ach.description_l
-        if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
-            d = d[: -len(ach.rarity_text)]
-        if rq in d.lower():
+    def check_search_match(ach, rq):
+        if ach.icon_gray == 'hidden_dummy_ach_icon':
+            return stg['secrets'] == 'bottom'
+        if rq == '#hidden':
+            return ach.hidden
+        elif rq == '#not_hidden':
+            return not ach.hidden
+        elif rq == '#progress':
+            return ach.progress != None
+        rq = rq.lower()
+        if rq in ach.display_name_np.lower():
             return True
-    return False
-
-notif_names = {'unlock': 'Achievement Unlocked!', 'lock': 'Achievement Locked',
-               'lock_all': 'All achievements locked', 'progress_report': 'Achievement Progress',
-               'schema_change': 'Achievements'}
-
-def pick_sound(x):
-    global sound_to_play
-    if sound_to_play == 5 or x == 5:
-        sound_to_play = 5
-    elif stg['sound_rare_over_multi'] and (sound_to_play == 3 or x == 3):
-        sound_to_play = 3
-    elif sounds[4] != None and sound_to_play != 0:
-        sound_to_play = 4
-    else:
-        sound_to_play = max(x, sound_to_play)
-
-def create_notification(t, change):
-    u = 1
-    if viewing == 'history':
-        u = 2
-    if not stg['history_unread']:
-        u = 0
-
-    h = {'type': t, 'unread': u, 'time_real': change['time_real'], 'time_action': change['time_action']}
-    if 'ach_obj' in change and t != 'lock_all':
-        ach = change['ach_obj']
-        h['ach'] = ach
-    if t == 'progress_report':
-        h['value'] = change['value']
-    if stg['history_length'] > -1:
-        history.insert(0, h)
-
-    if stg['sound']:
-        if t == 'unlock':
-            if achs_unlocked == len(achs) and sounds[5] != None:
-                pick_sound(5)
-            elif ach.rare and sounds[3] != None:
-                pick_sound(3)
-            elif sounds[2] != None:
-                pick_sound(2)
-        elif t == 'progress_report' and sounds[1] != None:
-            pick_sound(1)
-
-    if stg['notif']:
-        if t != 'schema_change':
-            global notifications_sent, notifications_hidden
-            if stg['notif_limit'] == 0 or notifications_sent < stg['notif_limit']:
-                notifications_sent += 1
-            else:
-                notifications_hidden += 1
-                return
-        
-        title = notif_names[t]
-        if 'ach' in h:
-            message = ach.display_name_np
-        elif t == 'lock_all':
-            message = 'Achievement data not found'
-        elif t == 'schema_change':
-            message = 'Achievement list has changed'
-        if t == 'progress_report':
-            message += f" ({change['value'][0]}/{change['value'][1]})"
-
-        if 'ach' in h and stg['notif_desc'] and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
-            title = message
-            message = ach.description_l
+        if ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
+            d = ach.description_l
             if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
-                message = message[: -len(ach.rarity_text)]
+                d = d[: -len(ach.rarity_text)]
+            if rq in d.lower():
+                return True
+        return False
 
-        if len(title) > 64:
-            title = title[:61]
-        if len(message) > 256:
-            message = message[:253] + '...'
+    notif_names = {'unlock': 'Achievement Unlocked!', 'lock': 'Achievement Locked',
+                   'lock_all': 'All achievements locked', 'progress_report': 'Achievement Progress',
+                   'schema_change': 'Achievements'}
 
-        icon = None
-        if stg['notif_icons'] and 'ach' in h:
+    def pick_sound(x):
+        global sound_to_play
+        if sound_to_play == 5 or x == 5:
+            sound_to_play = 5
+        elif stg['sound_rare_over_multi'] and (sound_to_play == 3 or x == 3):
+            sound_to_play = 3
+        elif sounds[4] != None and sound_to_play != 0:
+            sound_to_play = 4
+        else:
+            sound_to_play = max(x, sound_to_play)
+
+    def create_notification(t, change):
+        u = 1
+        if viewing == 'history':
+            u = 2
+        if not stg['history_unread']:
+            u = 0
+
+        h = {'type': t, 'unread': u, 'time_real': change['time_real'], 'time_action': change['time_action']}
+        if 'ach_obj' in change and t != 'lock_all':
+            ach = change['ach_obj']
+            h['ach'] = ach
+        if t == 'progress_report':
+            h['value'] = change['value']
+            if stg['exp_history_autosave_auto']:
+                stg['exp_history_autosave'] = True
+        if stg['history_length'] > -1:
+            history.insert(0, h)
+            if stg['exp_history_autosave']:
+                save_hist(f'{save_dir}/{appid}_history.json', False, True)
+
+        if stg['sound']:
             if t == 'unlock':
-                icon = ach.icon
-            else:
-                icon = ach.icon_gray
+                if achs_unlocked == len(achs) and sounds[5] != None:
+                    pick_sound(5)
+                elif ach.rare and sounds[3] != None:
+                    pick_sound(3)
+                elif sounds[2] != None:
+                    pick_sound(2)
+            elif t == 'progress_report' and sounds[1] != None:
+                pick_sound(1)
 
-        send_notification(title, message, icon)
+        if stg['notif']:
+            if t != 'schema_change':
+                global notifications_sent, notifications_hidden
+                if stg['notif_limit'] == 0 or notifications_sent < stg['notif_limit']:
+                    notifications_sent += 1
+                else:
+                    notifications_hidden += 1
+                    return
+            
+            title = notif_names[t]
+            if 'ach' in h:
+                message = ach.display_name_np
+            elif t == 'lock_all':
+                message = 'Achievement data not found'
+            elif t == 'schema_change':
+                message = 'Achievement list has changed'
+            if t == 'progress_report':
+                message += f" ({change['value'][0]}/{change['value'][1]})"
 
-if len(ach_percentages) > 0 and len(ach_idxs) > 0 and set(ach_percentages) != set(ach_idxs):
-    t = datetime.now().strftime(stg['strftime'])
-    ch = {'time_real': t, 'time_action': t}
-    create_notification('schema_change', ch)
+            if 'ach' in h and stg['notif_desc'] and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
+                title = message
+                message = ach.description_l
+                if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
+                    message = message[: -len(ach.rarity_text)]
+
+            if len(title) > 64:
+                title = title[:61]
+            if len(message) > 256:
+                message = message[:253] + '...'
+
+            icon = None
+            if stg['notif_icons'] and 'ach' in h:
+                if t == 'unlock':
+                    icon = ach.icon
+                else:
+                    icon = ach.icon_gray
+
+            send_notification(title, message, icon)
+
+    if len(ach_percentages) > 0 and len(ach_idxs) > 0 and set(ach_percentages) != set(ach_idxs):
+        t = datetime.now().strftime(stg['strftime'])
+        ch = {'time_real': t, 'time_action': t}
+        create_notification('schema_change', ch)
+
+    if not reload and stg['exp_history_autosave'] and os.path.isfile(f'{save_dir}/{appid}_history.json'):
+        load_hist(f'{save_dir}/{appid}_history.json', True)
+
+    globals().update(locals())
+
+load_everything()
 
 while running:
+
+    if last_console_len != len(internal_console) + console_lines_erased:
+        new_console_line = True
+        last_console_len = len(internal_console) + console_lines_erased
+        if viewing == 'console':
+            flip_required = True
 
     update_time = time.time() >= last_update + stg['delay']
     if update_time or 1 in steam_requests_state.values():
@@ -1493,6 +1907,10 @@ while running:
         notifications_sent = 0
         notifications_hidden = 0
         sound_to_play = 0
+        if new_console_line:
+            if stg['sound'] and sounds[0.5] != None:
+                sound_to_play = 0.5
+            new_console_line = False
         fu_change = False
         ts_change = set()
         ts_lost = False
@@ -1665,6 +2083,8 @@ while running:
             with open(f'{save_dir}/{appid}_inc_only.json', 'w') as iofile:
                 json.dump(increment_only, iofile, indent=4)
 
+    unreads_in_history = len(history) > 0 and history[0]['unread'] != 0
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -1694,6 +2114,12 @@ while running:
                     scroll_stats += 1
                 elif viewing == 'history':
                     scroll_history += 1
+                elif viewing == 'console':
+                    scroll_console += 1
+                elif viewing == 'console_line':
+                    if console_lines_erased < (viewing_line_num + 1) <= console_lines_erased + len(internal_console):
+                        viewing_line_num += 1
+                        viewing_line = internal_console[viewing_line_num - console_lines_erased - 1]
                 flip_required = True
             elif event.key == pygame.K_UP:
                 if viewing in ('achs', 'history_unlocks'):
@@ -1702,6 +2128,12 @@ while running:
                     scroll_stats -= 1
                 elif viewing == 'history':
                     scroll_history -= 1
+                elif viewing == 'console':
+                    scroll_console -= 1
+                elif viewing == 'console_line':
+                    if console_lines_erased < (viewing_line_num - 1) <= console_lines_erased + len(internal_console):
+                        viewing_line_num -= 1
+                        viewing_line = internal_console[viewing_line_num - console_lines_erased - 1]
                 flip_required = True
             elif event.key == pygame.K_PAGEUP:
                 if viewing in ('achs', 'history_unlocks'):
@@ -1710,6 +2142,8 @@ while running:
                     scroll_stats -= stats_to_show
                 elif viewing == 'history':
                     scroll_history -= achs_to_show
+                elif viewing == 'console':
+                    scroll_console -= console_lines_to_show
                 flip_required = True
             elif event.key == pygame.K_PAGEDOWN:
                 if viewing in ('achs', 'history_unlocks'):
@@ -1718,6 +2152,8 @@ while running:
                     scroll_stats += stats_to_show
                 elif viewing == 'history':
                     scroll_history += achs_to_show
+                elif viewing == 'console':
+                    scroll_console += console_lines_to_show
                 flip_required = True
             elif event.key == pygame.K_f and viewing == 'achs' and header_extra[:6] != 'search' and search_request == '':
                 keys = pygame.key.get_pressed()
@@ -1763,26 +2199,132 @@ while running:
                     command += ' -s' * (viewing == 'stats')
                     os.system(command)
             elif event.key == pygame.K_BACKQUOTE:
-                xnote = ''
-                if achdata_source == 'goldberg' and source_extra == 'f':
-                    xnote = ' ("GSE Saves" fork)'
-                elif achdata_source == 'codex':
-                    xnote = {False: ' (Documents)', True: ' (AppData)'}
-                    xnote = xnote[source_extra]
-                elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
-                    xnote = ' (' + save_dir.split('_')[-1] + ')'
-                print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.0')
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if not viewing in ('console' ,'console_line'):
+                        viewing_before_console = viewing
+                        viewing = 'console'
+                        flip_required = True
+                else:
+                    xnote = ''
+                    if achdata_source == 'goldberg' and source_extra == 'f':
+                        xnote = ' ("GSE Saves" fork)'
+                    elif achdata_source == 'codex':
+                        xnote = {False: ' (Documents)', True: ' (AppData)'}
+                        xnote = xnote[source_extra]
+                    elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
+                        xnote = ' (' + save_dir.split('_')[-1] + ')'
+                    print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
+                    print(' - Version: v1.4.0e1')
+            elif event.key == pygame.K_e:
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
+                        code = last_code
+                    else:
+                        code = input('Enter code to execute:\n', True)
+                    flip_required = True
+                    try:
+                        exec(code)
+                    except Exception as ex:
+                        print(f'Failed to execute code - {type(ex).__name__}')
+                    last_code = code
+            elif event.key == pygame.K_ESCAPE:
+                if viewing == 'console':
+                    scroll_console = 0
+                    viewing = viewing_before_console
+                    flip_required = True
+                elif viewing == 'console_line':
+                    viewing = 'console'
+                    flip_required = True
+            elif event.key == pygame.K_c:
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if viewing == 'console_line':
+                        pyperclip.copy(viewing_line['text'])
+            elif event.key == pygame.K_w:
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if achdata_source == 'steam':
+                        print("Can't wipe Steam progress")
+                    elif not stg['exp_allow_wiping']:
+                        print('Progress wiping must be allowed in settings')
+                    else:
+                        if stg['exp_confirm_wiping']:
+                            if input('Enter "y" to confirm wiping progress: ') != 'y':
+                                continue
+                        p = get_player_achs_path(achdata_source, appid, source_extra)
+                        if os.path.isfile(p):
+                            os.remove(p)
+                        p = get_stats_path(achdata_source, appid, source_extra)
+                        if achdata_source == 'goldberg':
+                            if os.path.isdir(p):
+                                shutil.rmtree(p)
+                        elif achdata_source != 'sse':
+                            if os.path.isfile(p):
+                                os.remove(p)
+
+                        increment_only = {}
+                        for s in stats.values():
+                            s.value = s.default
+                            s.real_value = s.default
+                            if s.inc_only:
+                                increment_only[s.name] = s.default
+
+                        force_unlocks = {}
+                        saved_tstamps = {}
+                        achs_unlocked = 0
+                        for a in achs:
+                            a.earned = False
+                            a.force_unlock = False
+                            a.earned_time = 0.0
+                            a.ts_first = None
+                            a.ts_earliest = None
+                            a.progress_reported = None
+                            if a.progress != None:
+                                a.progress.calculate(stats)
+                            saved_tstamps[a.name] = {'first': None, 'earliest': None}
+
+                        for n in ['force', 'time', 'inc_only']:
+                            if os.path.isfile(f'{save_dir}/{appid}_{n}.json'):
+                                os.remove(f'{save_dir}/{appid}_{n}.json')
+                        flip_required = True
+                        filter_needed = True
+            elif event.key == pygame.K_r:
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    stg_to_keep = {}
+                    for s in ['sort_by_rarity', 'unlocks_on_top', 'unlocks_timesort', 'secrets']:
+                        stg_to_keep[s] = stg[s]
+                    rld = not 1 in (keys[pygame.K_LALT], keys[pygame.K_RALT])
+                    kd = rld and 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
+                    load_everything(rld, kd)
+            elif event.key == pygame.K_g and viewing in ('achs', 'history_unlocks'):
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if grid_view:
+                        scroll *= achs_to_show_horiz
+                    else:
+                        scroll //= achs_to_show_horiz
+                    grid_view = not grid_view
+                    flip_required = True
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
                 old_hover_ach = hover_ach
+                old_hover_ach_horiz = hover_ach_horiz
                 hover_ach = None
-                for i in range(achs_to_show + 1):
+                hover_ach_horiz = None
+                for i in range(achs_to_show + 1 + (-2 * (grid_view and stg['exp_grid_reserve_last_line']))):
                     if pygame.Rect(10, header_h + i * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2).collidepoint(event.pos):
                         hover_ach = i
+                        if i != achs_to_show or stg['exp_grid_show_extra_line']:
+                            for j in range(achs_to_show_horiz):
+                                if 10 + j * 74 <= event.pos[0] <= 73 + j * 74:
+                                    hover_ach_horiz = j
+                                    break
                         break
-                if hover_ach != old_hover_ach:
+                if hover_ach != old_hover_ach or hover_ach_horiz != old_hover_ach_horiz:
                     flip_required = True
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -1941,6 +2483,11 @@ while running:
                     if stg['history_clearable']:
                         scroll_history = 0
                         history.clear()
+                        if stg['exp_history_autosave']:
+                            if stg['exp_history_autosave_clear'] == 'save':
+                                save_hist(f'{save_dir}/{appid}_history.json', False, True)
+                            elif stg['exp_history_autosave_clear'] == 'disable':
+                                stg['exp_history_autosave'] = False
                     else:
                         print('Clear history button was disabled in settings')
                 elif btn_locs['history_unlocks'].collidepoint(event.pos):
@@ -1965,11 +2512,22 @@ while running:
                     # scroll = scroll_achs_copy
                     # achs_f, secrets_hidden = filter_achs(achs, state_filter, stg)
                     # viewing = 'history'
+            elif viewing == 'console':
+                pos = pygame.mouse.get_pos()
+                if pos[1] < min(len(internal_console), console_lines_to_show) * stg['font_line_distance_regular']:
+                    l = max(len(internal_console) - console_lines_to_show, 0) + pos[1] // stg['font_line_distance_regular'] + scroll_console
+                    viewing_line = internal_console[l]
+                    viewing_line_num = console_lines_erased + l + 1
+                    viewing = 'console_line'
+            elif viewing == 'console_line':
+                viewing = 'console'
             if viewing in ('achs', 'history', 'history_unlocks') and hover_ach != None:
                 if viewing == 'history' and scroll_history + hover_ach < len(history) and 'ach' in history[scroll_history + hover_ach]:
                     a = history[scroll_history + hover_ach]['ach']
-                elif viewing != 'history' and scroll + hover_ach < len(achs_f):
+                elif viewing != 'history' and not grid_view and scroll + hover_ach < len(achs_f):
                     a = achs_f[scroll + hover_ach]
+                elif viewing != 'history' and grid_view and hover_ach_horiz != None and (scroll + hover_ach) * achs_to_show_horiz + hover_ach_horiz < len(achs_f):
+                    a = achs_f[(scroll + hover_ach) * achs_to_show_horiz + hover_ach_horiz]
                 else:
                     continue
                 if a.icon_gray == 'hidden_dummy_ach_icon':
@@ -2032,11 +2590,14 @@ while running:
                 scroll_stats -= event.y
             elif viewing == 'history':
                 scroll_history -= event.y
+            elif viewing == 'console':
+                scroll_console -= event.y
             flip_required = True
  
         elif event.type == pygame.ACTIVEEVENT:
             if event.gain != 1 and hover_ach != None:
                 hover_ach = None
+                hover_ach_horiz = None
                 flip_required = True
 
     if filter_needed:
@@ -2073,11 +2634,16 @@ while running:
     if viewing in ('achs', 'history_unlocks'):
         if mouse_scrolling:
             oldscr = scroll
-            scroll = (y - header_h) * (len(achs_f) - achs_to_show) // (stg['window_size_y'] - header_h - 1)
+            if not grid_view:
+                scroll = (y - header_h) * (len(achs_f) - achs_to_show) // (stg['window_size_y'] - header_h - 1)
+            else:
+                scroll = (y - header_h) * (get_grid_height() - (achs_to_show - stg['exp_grid_reserve_last_line'])) // (stg['window_size_y'] - header_h - 1)
             if scroll != oldscr:
                 flip_required = True
         if scroll > len(achs_f) - achs_to_show:
             scroll = len(achs_f) - achs_to_show
+        if grid_view and scroll > get_grid_height() - (achs_to_show - stg['exp_grid_reserve_last_line']):
+            scroll = get_grid_height() - (achs_to_show - stg['exp_grid_reserve_last_line'])
         if scroll < 0:
             scroll = 0
     elif viewing == 'stats':
@@ -2100,9 +2666,21 @@ while running:
             scroll_history = len(history) - achs_to_show
         if scroll_history < 0:
             scroll_history = 0
+    elif viewing == 'console':
+        if scroll_console < (len(internal_console) - console_lines_to_show) * -1:
+            scroll_console = (len(internal_console) - console_lines_to_show) * -1
+        if scroll_console > 0:
+            scroll_console = 0
 
+    popped = False
     while stg['history_length'] != 0 and len(history) > 0 and len(history) > stg['history_length']:
         history.pop(-1)
+        popped = True
+    if (popped or (len(history) > 0 and unreads_in_history and history[0]['unread'] == 0)) and stg['exp_history_autosave']:
+        save_hist(f'{save_dir}/{appid}_history.json', False, True)
+    while stg['exp_console_max_lines'] != 0 and len(internal_console) > stg['exp_console_max_lines']:
+        internal_console.pop(0)
+        console_lines_erased += 1
 
     if flip_required:
         if viewing in ('achs', 'history_unlocks'):
@@ -2111,6 +2689,10 @@ while running:
             draw_stats()
         elif viewing == 'history':
             draw_history()
+        elif viewing == 'console':
+            draw_console()
+        elif viewing == 'console_line':
+            draw_console_line()
         flip_required = False
 
     time.sleep(stg['delay_sleep'])

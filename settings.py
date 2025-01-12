@@ -1,6 +1,7 @@
 import os
 import sys
 import zlib
+from experimental import *
 
 def get_game_name(appid):
     try:
@@ -230,7 +231,22 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'smooth_scale': {'type': 'bool', 'default': True},
                   'stat_display_names': {'type': 'bool', 'default': True},
                   'generator_path': {'type': 'str', 'default': ''},
-                  'api_key': {'type': 'str', 'default': ''}}
+                  'api_key': {'type': 'str', 'default': ''},
+                  'exp_console_max_lines': {'type': 'int', 'default': 0},
+                  'exp_no_cmd_input': {'type': 'bool', 'default': False},
+                  'exp_sound_console': {'type': 'str', 'default': ''},
+                  'exp_allow_wiping': {'type': 'bool', 'default': False},
+                  'exp_confirm_wiping': {'type': 'bool', 'default': True},
+                  'exp_history_location': {'type': 'str', 'default': '*'},
+                  'exp_history_autosave': {'type': 'bool', 'default': False},
+                  'exp_history_autosave_clear': {'type': 'choice', 'allowed': ['save', 'disable', 'ignore'], 'default': 'save'},
+                  'exp_history_autosave_auto': {'type': 'bool', 'default': False},
+                  'exp_grid_default': {'type': 'bool', 'default': False},
+                  'exp_grid_bar_height': {'type': 'int', 'default': 10},
+                  'exp_grid_bar_hover_hide': {'type': 'bool', 'default': False},
+                  'exp_grid_empty_line': {'type': 'bool', 'default': True},
+                  'exp_grid_show_extra_line': {'type': 'bool', 'default': False},
+                  'exp_grid_reserve_last_line': {'type': 'bool', 'default': False}}
 
 def load_settings(appid, source, ach_dumper=False):
     settings = {}
