@@ -2,29 +2,45 @@ import struct
 from filechanges import FileChecker
 
 class Stat:
-    def __init__(self, fileinfo, s_type, default, sleep_t, stat_dnames):
+    def __init__(self, fileinfo, s_type, default, sleep_t, stat_dnames, inc_only):
         fileinfo['type'] = s_type
         self.name = fileinfo['name']
         self.type = s_type
         self.default = self.to_stat_type(default)
         self.value = self.default
+        self.real_value = self.value
+
+        self.inc_only = '*' in inc_only or self.name in inc_only
+
         if fileinfo['source'] == 'goldberg':
             self.fchecker = FileChecker('stat', fileinfo, sleep_t)
             self.update_val(True)
+        elif fileinfo['source'] == 'steam' and s_type == 'avgrate':
+            self.type = 'avgrate_st'
 
         self.dname = self.name
         if self.name in stat_dnames and stat_dnames[self.name] != '':
             self.dname = stat_dnames[self.name]
+
+    def set_val(self, new):
+        self.real_value = new
+        if self.inc_only:
+            if new > self.value:
+                self.value = new
+                return True
+        elif self.value != new:
+            self.value = new
+            return True
+        return False
 
     def update_val(self, creation=False):
         if self.type in ('int', 'float'):
             changed, newdata = self.fchecker.check(creation)
             if changed:
                 if newdata != None:
-                    self.value = newdata
+                    return self.set_val(newdata)
                 else:
-                    self.value = self.default
-                return True
+                    return self.set_val(self.default)
         return False
 
     def to_stat_type(self, v):

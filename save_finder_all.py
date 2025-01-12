@@ -2,6 +2,17 @@ import os
 import sys
 import requests
 
+if len(sys.argv) == 1:
+    print('Choose a grouping mode or write nothing to use default mode:')
+    print('    - emulator > username > game [default]')
+    print('  g - game > emulator > username')
+    print(' eg - emulator > game > username')
+    print('eg2 - emulator > game > username (alt)')
+    inp = input('Mode: ')
+    if inp in ('g', 'eg', 'eg2'):
+        sys.argv.append('-' + inp)
+    print()
+
 group_by_game = '-g' in sys.argv
 subgroup_by_game = '-eg' in sys.argv or '-eg2' in sys.argv
 subgroup_by_game_alt = '-eg2' in sys.argv
@@ -32,6 +43,8 @@ def add_save(appid, emu, user=None):
     appids.add(appid)
 
 def scan_for_appids(path, emu, user=None):
+    if not os.path.isdir(path):
+        return
     for f in os.scandir(path):
         if f.is_dir():
             if emu == 'SmartSteamEmu':
@@ -49,8 +62,10 @@ def scan_for_appids(path, emu, user=None):
 
 p = os.path.join(os.environ['APPDATA'], 'Goldberg SteamEmu Saves')
 scan_for_appids(p, 'Goldberg')
+p = os.path.join(os.environ['APPDATA'], 'GSE Saves')
+scan_for_appids(p, 'Goldberg', '"GSE Saves" fork')
 
-p = 'C:/Users/Public/Documents/Steam/CODEX/'
+p = 'C:/Users/Public/Documents/Steam/CODEX'
 scan_for_appids(p, 'Codex', 'Documents')
 
 p = os.path.join(os.environ['APPDATA'], 'Steam/CODEX')
@@ -73,7 +88,9 @@ try:
     else:
         print(f' ! Failed to download app names ({r.status_code})')
 except requests.exceptions.ConnectionError:
-    print(' ! Failed to download app names (Connection error)')
+    print('[!] Failed to download app names (Connection error)')
+except Exception as ex:
+    print(f'[!] Failed to download app names ({type(ex).__name__})')
 
 def get_name_str(appid):
     name_str = appid
@@ -111,5 +128,11 @@ else:
                             print('    ' + u)
                         else:
                             print(f'  {get_name_str(i)} ({u})')
+                    else:
+                        if not subgroup_by_game_alt:
+                            if e != 'Goldberg':
+                                print('    <No username>')
+                        else:
+                            print(f'  {get_name_str(i)}')
 
 os.system('pause')

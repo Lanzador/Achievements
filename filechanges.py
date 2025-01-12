@@ -5,29 +5,42 @@ import json
 import time
 import struct
 
+if platform.uname().system == 'Windows':
+    import ctypes
+    from ctypes.wintypes import MAX_PATH
+    dll = ctypes.windll.shell32
+
 def get_player_achs_path(source, appid, extra=None):
     if source == 'goldberg':
+        if (extra != None and len(extra) > 5 and extra[:5] == 'path:'):
+            return os.path.join(extra[5:], appid, 'achievements.json')
+        dir_name = 'Goldberg SteamEmu Saves'
+        if extra == 'f':
+            dir_name = 'GSE Saves'
         if platform.uname().system == 'Windows':
-            return os.path.join(os.environ['APPDATA'], 'Goldberg SteamEmu Saves', appid, 'achievements.json')
+            return os.path.join(os.environ['APPDATA'], dir_name, appid, 'achievements.json')
         elif platform.uname().system == 'Linux':
             if os.environ.get('XDG_DATA_HOME') is not None:
-                return os.path.join(os.path.expandvars('$XDG_DATA_HOME/Goldberg SteamEmu Saves'), appid, 'achievements.json')
+                return os.path.join(os.path.expandvars('$XDG_DATA_HOME'), dir_name, appid, 'achievements.json')
             else:
-                return os.path.join(os.path.expandvars('$HOME/.local/share/Goldberg SteamEmu Saves'), appid, 'achievements.json')
+                return os.path.join(os.path.expandvars('$HOME/.local/share'), dir_name, appid, 'achievements.json')
         else:
             print('Unable to determine location of player progress')
             sys.exit()
     elif source == 'codex' and platform.uname().system == 'Windows':
         if extra == False:
-            return os.path.join('C:/Users/Public/Documents/Steam/CODEX', appid, 'achievements.ini')
+            buf = ctypes.create_unicode_buffer(MAX_PATH + 1)
+            if not dll.SHGetSpecialFolderPathW(None, buf, 46, False):
+                print('Failed to get path to documents folder')
+            return os.path.join(buf.value, 'Steam/CODEX', appid, 'achievements.ini')
         else:
             return os.path.join(os.environ['APPDATA'], 'Steam/CODEX', appid, 'achievements.ini')
     elif source == 'ali213' and platform.uname().system == 'Windows':
         if not (extra != None and len(extra) > 5 and extra[:5] == 'path:'):
-            playername = 'Player'
-            if extra != None:
-                playername = extra
-            return os.path.join(os.environ['USERPROFILE'], 'Documents/VALVE', appid, playername, 'Stats/Achievements.Bin')
+            buf = ctypes.create_unicode_buffer(MAX_PATH + 1)
+            if not dll.SHGetSpecialFolderPathW(None, buf, 5, False):
+                print('Failed to get path to documents folder')
+            return os.path.join(buf.value, 'VALVE', appid, extra, 'Stats/Achievements.Bin')
         else:
             return os.path.join(extra[5:], 'Stats/Achievements.Bin')
     elif source == 'sse' and platform.uname().system == 'Windows':
@@ -43,24 +56,32 @@ def get_player_achs_path(source, appid, extra=None):
         
 def get_stats_path(source, appid, extra=None):
     if source == 'goldberg':
+        if (extra != None and len(extra) > 5 and extra[:5] == 'path:'):
+            return os.path.join(extra[5:], appid, 'stats')
+        dir_name = 'Goldberg SteamEmu Saves'
+        if extra == 'f':
+            dir_name = 'GSE Saves'
         if platform.uname().system == 'Windows':
-            return os.path.join(os.environ['APPDATA'], 'Goldberg SteamEmu Saves', appid, 'stats')
+            return os.path.join(os.environ['APPDATA'], dir_name, appid, 'stats')
         elif platform.uname().system == 'Linux':
             if os.environ.get('XDG_DATA_HOME') is not None:
-                return os.path.join(os.path.expandvars('$XDG_DATA_HOME/Goldberg SteamEmu Saves'), appid, 'stats')
+                return os.path.join(os.path.expandvars('$XDG_DATA_HOME'), dir_name, appid, 'stats')
             else:
-                return os.path.join(os.path.expandvars('$HOME/.local/share/Goldberg SteamEmu Saves'), appid, 'stats')
+                return os.path.join(os.path.expandvars('$HOME/.local/share'), dir_name, appid, 'stats')
     elif source == 'codex' and platform.uname().system == 'Windows':
         if extra == False:
-            return os.path.join('C:/Users/Public/Documents/Steam/CODEX', appid, 'stats.ini')
+            buf = ctypes.create_unicode_buffer(MAX_PATH + 1)
+            if not dll.SHGetSpecialFolderPathW(None, buf, 46, False):
+                print('Failed to get path to documents folder')
+            return os.path.join(buf.value, 'Steam/CODEX', appid, 'stats.ini')
         else:
             return os.path.join(os.environ['APPDATA'], 'Steam/CODEX', appid, 'stats.ini')
     elif source == 'ali213' and platform.uname().system == 'Windows':
         if not (extra != None and len(extra) > 5 and extra[:5] == 'path:'):
-            playername = 'Player'
-            if extra != None:
-                playername = extra
-            return os.path.join(os.environ['USERPROFILE'], 'Documents/VALVE', appid, playername, 'Stats/Stats.Bin')
+            buf = ctypes.create_unicode_buffer(MAX_PATH + 1)
+            if not dll.SHGetSpecialFolderPathW(None, buf, 5, False):
+                print('Failed to get path to documents folder')
+            return os.path.join(buf.value, 'VALVE', appid, extra, 'Stats/Stats.Bin')
         else:
             return os.path.join(extra[5:], 'Stats/Stats.Bin')
     elif source == 'sse' and platform.uname().system == 'Windows':
@@ -85,7 +106,9 @@ class FileChecker:
             self.path = get_player_achs_path(locinfo['source'], locinfo['appid'], locinfo['source_extra'])
         elif filetype == 'stat':
             if self.source == 'goldberg':
-                self.path = os.path.join(get_stats_path(locinfo['source'], locinfo['appid']), locinfo['name'])
+                self.path1 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid']), locinfo['name'].lower())
+                self.path2 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid']), locinfo['name'])
+                self.path = self.path1 if os.path.isfile(self.path1) else self.path2
             else:
                 self.path = get_stats_path(locinfo['source'], locinfo['appid'], locinfo['source_extra'])
         try:
@@ -95,6 +118,11 @@ class FileChecker:
 
     def check(self, force_read = False):
         try:
+            if self.source == 'goldberg' and self.filetype == 'stat':
+                self.path = self.path1
+                if not os.path.isfile(self.path):
+                    self.path = self.path2
+
             stamp = os.stat(self.path).st_mtime
             if stamp != self.last_check or force_read:
                 if self.sleep_t > 0:

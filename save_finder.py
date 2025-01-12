@@ -4,7 +4,7 @@ import sys
 if len(sys.argv) > 1:
     appid = sys.argv[1]
 else:
-    appid = input('Enter AppID:')
+    appid = input('Enter AppID: ')
 
 alias = []
 try:
@@ -21,6 +21,8 @@ for l in alias:
 
 if os.path.isdir(os.path.join(os.environ['APPDATA'], 'Goldberg SteamEmu Saves', appid)):
     print('Goldberg')
+if os.path.isdir(os.path.join(os.environ['APPDATA'], 'GSE Saves', appid)):
+    print('Goldberg ("GSE Saves" fork)')
 
 if os.path.isdir(f'C:/Users/Public/Documents/Steam/CODEX/{appid}'):
     print('Codex (Documents)')

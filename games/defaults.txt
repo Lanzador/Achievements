@@ -1,0 +1,8 @@
+Use this file to set default emulator and default profiles (emulator usernames, Steam ID).
+
+emulator=g
+goldberg=
+codex=
+ali213=
+sse=
+steam=

@@ -7,16 +7,15 @@ import requests
 from datetime import datetime
 from random import randint
 
-from settings import get_game_name, check_alias, source_name, load_settings, get_save_dir
+from settings import *
 from filechanges import get_player_achs_path, get_stats_path
 from achievements import convert_achs_format
 from stats import Stat, convert_stats_format
 
 def send_steam_request(name, link):
-    if not name in ('appdetails', 'GetGlobalAchievementPercentagesForApp', 'GetSchemaForGame'):
-        global url_random
-        url_random += 1
-        link += f'&__random?={url_random}'
+    global url_random
+    url_random += 1
+    link += f'&__random?={url_random}'
     try:
         r = requests.get(link)
         if int(r.status_code / 100) != 4:
@@ -39,76 +38,42 @@ def send_steam_request(name, link):
             print(f'Got status code {r.status_code} ({name})')
     except requests.exceptions.ConnectionError:
         print(f'Connection error ({name})')
+    except Exception as ex:
+        print(f'Unhandled request error: {type(ex).__name__} ({name})')
     return None
 
 known_args = ['-u', '-l', '-h', '-sn', '-sh', '-sb', '-s', '-r', '-uot', '-t']
 args_count = len(sys.argv)
-for a in known_args:
-    args_count -= int(a in sys.argv)
+for a in sys.argv:
+    args_count -= int(a in known_args)
 
-appid, achdata_source, source_extra = (None, None, None)
-if args_count > 1:
-    appid = check_alias(sys.argv[1])
-    if len(appid.split()) > 1:
-        if args_count > 2:
-            appid = appid.split()[0]
-        else:
-            achdata_source = source_name(appid.split()[1])
-            if achdata_source == 'codex':
-                source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
-            elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
-                source_extra = ' '.join(appid.split(' ')[2:])
-            elif achdata_source == 'steam' and len(appid.split()) > 2:
-                source_extra = appid.split()[2]
-            elif achdata_source == None:
-                print('Invalid emulator name')
-                sys.exit()
-            appid = appid.split()[0]
-    
-    if achdata_source == None and args_count > 2:
-        achdata_source = source_name(sys.argv[2])
-        if achdata_source == 'codex':
-            source_extra = args_count > 3 and sys.argv[3] in ('a', 'appdata')
-        elif achdata_source in ('ali213', 'sse', 'steam') and args_count > 3:
-            source_extra = sys.argv[3]
-        elif achdata_source == None:
-            print('Invalid emulator name')
-            sys.exit()
-    elif achdata_source == None:
-        achdata_source = 'goldberg'
+if len(sys.argv) > 1:
+    appid, achdata_source, source_extra = load_game(sys.argv[1 : min(4, args_count)], True)
 else:
-    inp = input('Enter AppID: ').split(' ')
+    inp = input('Enter AppID: ').split()
     for i in inp.copy():
         if i in known_args:
             sys.argv.append(i)
             inp.remove(i)
     inp = ' '.join(inp)
-    appid = check_alias(inp)
-    if len(appid.split()) > 1:
-        if appid == inp:
-            appid = check_alias(appid.split()[0]).split()[0] + ' ' + ' '.join(appid.split(' ')[1:])
-        achdata_source = source_name(appid.split()[1])
-        if achdata_source == 'codex':
-            source_extra = len(appid.split()) > 2 and appid.split()[2] in ('a', 'appdata')
-        elif achdata_source in ('ali213', 'sse') and len(appid.split()) > 2:
-            source_extra = ' '.join(appid.split(' ')[2:])
-        elif achdata_source == 'steam' and len(appid.split()) > 2:
-            source_extra = appid.split()[2]
-        elif achdata_source == None:
-            print('Invalid emulator name')
-            sys.exit()
-        appid = appid.split()[0]
-    else:
-        achdata_source = 'goldberg'
+    appid, achdata_source, source_extra = load_game(inp)
 
-if not appid.isnumeric():
-    print('Invalid AppID')
-    sys.exit()
-
-stg = load_settings(appid, achdata_source)
+stg = load_settings(appid, achdata_source, True)
 save_dir = get_save_dir(appid, achdata_source, source_extra)
 
 date = datetime.now()
+
+stg['language'].append('english')
+if stg['language_requests'] == None:
+    stg['language_requests'] = stg['language'][0]
+gamenames = {}
+if os.path.isfile('games/games.json'):
+    with open('games/games.json') as f:
+        gamenames = json.load(f)
+if appid in gamenames and stg['language_requests'] in gamenames[appid]:
+    gamename = gamenames[appid][stg['language_requests']]
+else:
+    gamename = get_game_name(appid)
 
 achs = []
 achs_crc32 = {}
@@ -120,6 +85,8 @@ timestamps = {}
 forced = {}
 dnames = {}
 percentages = {}
+inc_only_n = []
+inc_only = {}
 
 path_achs = f'games/{appid}/achievements.json'
 path_stats = f'games/{appid}/stats.txt'
@@ -130,6 +97,8 @@ path_force = f'{save_dir}/{appid}_force.json'
 path_time = f'{save_dir}/{appid}_time.json'
 path_dnames = f'games/{appid}/statdisplay.json'
 path_percentages = f'games/{appid}/unlockrates.json'
+path_inc_only_n = f'games/{appid}/increment_only.txt'
+path_inc_only = f'{save_dir}/{appid}_inc_only.json'
 
 url_random = randint(0, 10000000)
 
@@ -140,6 +109,13 @@ if os.path.isfile(path_achs):
 if stg['stat_display_names'] and os.path.isfile(path_dnames):
     with open(path_dnames) as f:
         dnames = json.load(f)
+if os.path.isfile(path_inc_only_n):
+    with open(path_inc_only_n) as f:
+        inc_only_n = f.read().split('\n')
+    if os.path.isfile(path_inc_only):
+        with open(path_inc_only) as f:
+            inc_only = json.load(f)
+
 if os.path.isfile(path_stats):
     with open(path_stats) as f:
         stats = f.read()
@@ -152,7 +128,7 @@ if os.path.isfile(path_stats):
             locinfo['source_extra'] = source_extra
             if achdata_source == 'sse':
                 stats_crc32[zlib.crc32(bytes(spl[0], 'utf-8'))] = spl[0]
-            stats[spl[0]] = Stat(locinfo, spl[1], spl[2], stg['delay_read_change'], dnames)
+            stats[spl[0]] = Stat(locinfo, spl[1], spl[2], stg['delay_read_change'], dnames, inc_only_n)
 
 if os.path.isfile(path_time):
     with open(path_time) as f:
@@ -202,10 +178,10 @@ else:
         print('An API key is required to track achievements from Steam')
         sys.exit()
 
-    source_extra = check_alias(source_extra)
-    if source_extra == None or not source_extra.isnumeric():
-        print('Invalid Steam user ID')
-        sys.exit()
+    # source_extra = check_alias(source_extra)
+    # if source_extra == None or not source_extra.isnumeric():
+        # print('Invalid Steam user ID')
+        # sys.exit()
 
     steam_req = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
     if steam_req != None:
@@ -215,8 +191,12 @@ else:
     steam_req = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={source_extra}")
     if steam_req != None and 'stats' in steam_req['playerstats']:
         for s in steam_req['playerstats']['stats']:
-            if s['name'] in stats.keys():
+            if s['name'] in stats:
                 stats[s['name']].value = s['value']
+
+for s in stats:
+    if stats[s].inc_only and s in inc_only:
+        stats[s].value = max(stats[s].value, inc_only[s])    
 
 def only_float_for_decimals(v):
     if isinstance(v, str):
@@ -230,12 +210,12 @@ class Achievement():
         self.name = a['name']
         self.display_name = a['displayName']
         self.description = a['description']
-        self.hidden = a['hidden'] == '1'
+        self.hidden = int(a['hidden']) == 1
 
         self.has_desc = isinstance(self.display_name, str) or 'english' in self.description
 
         if not isinstance(self.display_name, str):
-            for l in stg['language'] + ['english']:   
+            for l in stg['language']:   
                 if l in self.display_name:
                     self.display_name = self.display_name[l]
                     if self.has_desc:
@@ -259,11 +239,11 @@ class Achievement():
         self.progress_0 = 0
         self.progress_v = 0
         self.progress_1 = 1
-        if 'progress' in a:
+        if 'progress' in a and not (self.hidden and not self.unlock and stg['bar_hide_secret']):
             ap = a['progress']
             self.progress_f = ap['value']
             self.progress_1 = only_float_for_decimals(ap['max_val'])
-            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and ap['value']['operand1'] in s and s[ap['value']['operand1']].type in ('int', 'float'):
+            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and s[ap['value']['operand1']].type in ('int', 'float', 'avgrate_st'):
                 self.progress_0 = s[ap['value']['operand1']].to_stat_type(ap['min_val'])
                 self.progress_1 = s[ap['value']['operand1']].to_stat_type(ap['max_val'])
                 self.progress_v = s[ap['value']['operand1']].value
@@ -281,14 +261,12 @@ class Achievement():
         self.rarity_text = ''
         if self.name in p:
             self.rarity = round(p[self.name] * 10) / 10
-            self.rarity_text = str(self.rarity)
-            if not '.' in self.rarity_text:
-                self.rarity_text += '.0'
-            self.rarity_text = f' ({self.rarity_text}%)'
+            self.rarity_text = ' (' + str(self.rarity) + '%)'
             if stg['unlockrates'] == 'name':
                 self.display_name += self.rarity_text
             elif stg['unlockrates'] == 'desc':
                 self.description += self.rarity_text
+
 achs_obj = []
 unlock_count = 0
 for a in achs:
@@ -328,12 +306,10 @@ if timesort:
         unlocked_slice.sort(key=lambda a : a.time, reverse=True)
         achs_obj = unlocked_slice + achs_obj[unlock_count:]
 
-gamename = get_game_name(appid)
-
 text = appid
 if gamename != appid:
     text += ' - ' + gamename
-text += ' | ' + date.strftime('%d.%m.%Y %H:%M:%S')
+text += ' | ' + date.strftime(stg['strftime'])
 text += f'\nUnlocked: {unlock_count}/{len(achs_obj)}'
 if filt == True:
     text += ' (Unlocked only)'
@@ -370,11 +346,11 @@ for a in achs_obj:
     if not a.hidden or (a.unlock and not hide_descs):
         if a.has_desc:
             text += '\n' + a.description
-    # else:
-        # text += '\n' + stg['hidden_desc']
+    elif len(stg['hidden_desc']) > 0:
+        text += '\n' + stg['hidden_desc']
 
     if a.unlock:
-        text += '\n' + f"[Unlocked - {datetime.fromtimestamp(a.time).strftime('%d.%m.%Y %H:%M:%S')}]"
+        text += '\n' + f"[Unlocked - {datetime.fromtimestamp(a.time).strftime(stg['strftime'])}]"
     else:
         text += '\n[Locked]'
 
@@ -388,7 +364,8 @@ if secrets == 'bottom' and len(secrets_list) > 0 and filt != True:
 
     for a in secrets_list:
         text += '\n\n' + a.display_name
-        # text += '\n' + stg['hidden_desc']
+        if len(stg['hidden_desc']) > 0:
+            text += '\n' + stg['hidden_desc']
         text += '\n[Locked]'
 elif secrets == 'hide' and secrets_hidden > 0 and filt != True:
     if secrets_hidden == 1:

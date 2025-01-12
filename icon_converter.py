@@ -51,8 +51,14 @@ total_conv = 0
 errors = {}
 check_result = []
 for appid in appids:
+    config_from_fork = os.path.isdir(f'games/{appid}/img')
+    icons_path = f'games/{appid}/achievement_images'
+    if config_from_fork:
+        icons_path = f'games/{appid}/img'
+    conv_path = icons_path + '/ico'
+
     if check:
-        if not os.path.isdir(f'games/{appid}/achievement_images/ico'):
+        if not os.path.isdir(conv_path):
             check_result.append(appid)
         continue
 
@@ -66,18 +72,22 @@ for appid in appids:
         if 'icon_gray' in ach:
             icons.add(ach['icon_gray'])
 
-    if not os.path.isdir(f'games/{appid}/achievement_images/ico'):
-        os.makedirs(f'games/{appid}/achievement_images/ico')
+    if not os.path.isdir(conv_path):
+        os.makedirs(conv_path)
 
     done = 0
     errors[appid] = 0
     for icon in icons:
         done += 1
         extra_text = ''
-        if not os.path.isfile(f'games/{appid}/achievement_images/ico/{icon}.ico'):
+
+        if config_from_fork and icon[:4] == 'img/':
+            icon = icon[4:]
+
+        if not os.path.isfile(os.path.join(conv_path, icon + '.ico')):
             try:
-                img = Image.open(f'games/{appid}/achievement_images/{icon}')
-                img.save(f'games/{appid}/achievement_images/ico/{icon}.ico')
+                img = Image.open(os.path.join(icons_path, icon))
+                img.save(os.path.join(conv_path, icon + '.ico'))
                 total_conv += 1
             except Exception as ex:
                 errors[appid] += 1

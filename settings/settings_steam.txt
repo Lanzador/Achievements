@@ -1,1 +1,2 @@
 bar_force_unlock=0
+savetime_shown=normal

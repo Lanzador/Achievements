@@ -20,7 +20,7 @@ def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_ret
                 ignore_chars = prevlen
                 break
 
-    for i in range(ignore_chars + 1, len(s)):
+    for i in range(ignore_chars + 1, len(s) + 1):
         if font.size(s[:i])[0] > max_width:
             for j in range(i, 1, -1):
                 if font.size(s[:j] + '...')[0] <= max_width:
@@ -32,7 +32,6 @@ def long_text(screen, max_width, font, s, place, color=(255, 255, 255), only_ret
             else:
                 s = ''
             break
-
     if not only_return:
         show_text(screen, font, s, place, color)
     return s
@@ -55,12 +54,18 @@ def multiline_text(screen, max_lines, height_change, max_width, font, s, place, 
             if font.size(word)[0] <= max_width:
                 lines.append(word)
             else:
-                lines.append(long_text(screen, max_width, font, words[i], place, color, True))
+                if len(lines) == 1 and len(lines[0]) == 0:
+                    lines.pop(0)
+                lines.append(long_text(screen, max_width, font, word, place, color, True))
                 if len(lines) < max_lines:
                     lines.append('')
+                else:
+                    too_long = True
         else:
             lines[max_lines - 1] = long_text(screen, max_width, font, modified_line, place, color, True, len(lines[max_lines - 1]))
             too_long = True
+
+        if too_long: break
 
     if not only_return:
         for i in range(len(lines)):
