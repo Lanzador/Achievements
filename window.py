@@ -1772,7 +1772,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.0')
+                print(' - Version: v1.4.1')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -1796,7 +1796,7 @@ while running:
                     elif header_extra == 'sort' and pygame.Rect(stg['window_size_x'] - 160, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'secrets_reveal'
                 elif viewing == 'history':
-                    if scroll_history + hover_ach < len(history) and 'ach' in history[scroll_history + hover_ach]:
+                    if hover_ach != None and scroll_history + hover_ach < len(history) and 'ach' in history[scroll_history + hover_ach]:
                         ach = history[scroll_history + hover_ach]['ach']
                         if not (stg['secrets'] == 'hide' and ach.hidden) or ach.earned:
                             if state_filter != 0:

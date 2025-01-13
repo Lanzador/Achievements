@@ -54,6 +54,8 @@ By default, it's assumed that you use Goldberg. For other emulators, add their s
 
 To change the default emulator or assign default usernames, edit `games/defaults.txt`. If a default username is set, but you want to ignore it and load a game with no username, use the `/` symbol.
 
+It is recommended to always keep the program running while playing so that correct unlock timestamps can be saved and notifications can be displayed.
+
 ## Emulators
 The table below contains a list of supported emulators. Internal names are used when loading emulator-specific settings files. Any of the short names can be used when loading a game.
 
@@ -365,8 +367,6 @@ If no arguments are provided, you will be able to choose a grouping mode interac
 This script writes the achievement list for a given game to a text file which you can send to others to show your progress without screenshoting each page of the list.
 
 Settings used: `language`, `language_requests`, `savetime_shown`, `bar_hide_secret`, `bar_ignore_min`, `unlockrates`, `secrets`, `stat_display_names`, `strftime`, `api_key` (if loading progress from Steam)
-
-Use `settings_ad.txt` to set separate options for ach_dumper. Works for game/emulator-specific settings, too. Just add `_ad` to the filename.
 
 Game name, unlock rates and stat display names are loaded from files created by the main program. They are not updated by the script.
 

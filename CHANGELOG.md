@@ -1,3 +1,6 @@
+## v1.4.1
+- Fix crash on right-click outside of a history entry on history screen
+
 ## v1.4.0
 - Notification sounds
 - Increment-only stats
