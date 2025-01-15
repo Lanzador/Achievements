@@ -1539,6 +1539,7 @@ def load_everything(reload=False, keep_data=False):
         achs.append(Achievement(ach, achieved_json, stats, ach_percentages, stg))
 
     global ach_idxs
+    global achs_unlocked
     ach_idxs = {}
     ach_icons = {}
     achs_unlocked = 0
@@ -2215,7 +2216,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.4.1e1')
+                    print(' - Version: v1.4.1e2')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
