@@ -106,8 +106,8 @@ class FileChecker:
             self.path = get_player_achs_path(locinfo['source'], locinfo['appid'], locinfo['source_extra'])
         elif filetype == 'stat':
             if self.source == 'goldberg':
-                self.path1 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid']), locinfo['name'].lower())
-                self.path2 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid']), locinfo['name'])
+                self.path1 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid'], locinfo['source_extra']), locinfo['name'].lower())
+                self.path2 = os.path.join(get_stats_path(locinfo['source'], locinfo['appid'], locinfo['source_extra']), locinfo['name'])
                 self.path = self.path1 if os.path.isfile(self.path1) else self.path2
             else:
                 self.path = get_stats_path(locinfo['source'], locinfo['appid'], locinfo['source_extra'])
@@ -116,7 +116,7 @@ class FileChecker:
         except FileNotFoundError:
             self.last_check = None
 
-    def check(self, force_read = False):
+    def check(self, force_read=False):
         try:
             if self.source == 'goldberg' and self.filetype == 'stat':
                 self.path = self.path1

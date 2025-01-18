@@ -39,7 +39,7 @@ Achievements
         └───achievement_images
             │   icon1.jpg
             │   icon2.jpg
-			│   ...
+            │   ...
 ```
 
 You can also edit `games/alias.txt` to load the game's achievements using a short name instead of remembering AppIDs. If you use `generator_path`, you will be given the option to assign an alias right after config generation.
@@ -70,7 +70,13 @@ The table below contains a list of supported emulators. Internal names are used 
 ### Goldberg
 `[AppID] g [f]`
 
-If you haven't touched `defaults.txt`, this is the default emulator, so there isn't a need to explicitly write `g`. If you're using the fork that stores saves in `GSE Saves` instead of `Goldberg SteamEmu Saves`, add an `f`.
+If you haven't touched `defaults.txt`, this is the default emulator, so there isn't a need to explicitly write `g`.
+
+If you're using the fork that stores saves in `GSE Saves` instead of `Goldberg SteamEmu Saves`, add an `f`. If you're using that fork, it is recommended to disable `stat_achievement_progress_functionality` in `steam_settings/configs.main.ini` to prevent "Achievement Progress" notification spam.
+
+If you changed the save path for a game, you can enter the full path to these saves (prefixed with `path:`) to load your progress.
+
+For example: `480 g path:C:/Game folder/Goldberg`
 
 ### Codex
 `[AppID] c [a]`
@@ -91,9 +97,9 @@ For example: `480 a path:C:/Game folder/Profile/Username`
 
 Enable `StorageOnAppdata` in SSE's settings. If `SeparateStorageByName` is disabled, provide no username. If it is enabled, provide the username that you have in the emulator's settings.
 
-If `StorageOnAppdata` is disabled, you can still enter a full path to the folder containing AppID subfolders.
+If `StorageOnAppdata` is disabled, you can still enter a full path to the folder containing AppID subfolders, prefixed with `path:`.
 
-For example: `480 s path:D:/Game folder/SmartSteamEmu/Username`
+For example: `480 s path:C:/Game folder/SmartSteamEmu/Username`
 
 ### Steam
 `[AppID] st [User ID]`
@@ -180,7 +186,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `show_timestamps` - show timestamps. Default: `true`
 
-`strftime` - date/time format. Default: `%d %b %Y %H:%M:%S`
+`strftime` - [date/time format.](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) Default: `%d %b %Y %H:%M:%S`
 
 `history_length` - maximum length of history, after reaching which old entries get deleted. `0` disables the limit, `-1` hides the history button. Default: `0`
 
@@ -304,7 +310,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 - Run `settings.py` to generate `settings/settings_default.txt`.
 
-- Clicking an achievement will print some information about it: API name, languages, hidden?, progress stat, progress min_val (if it isn't 0), rarity (if `unlockrates=load`; if `unlockrates=desc` and the achievement is hidden), unlock time (if `show_timestamps` is disabled). Hold `SHIFT` to include description, API name and progress stat even if the achievement is hidden. Enable `ctrl_click` in settings and hold CTRL to check names and descriptions in differnet languages.
+- Clicking an achievement will print some information about it: API name, languages, hidden?, progress stat, progress min_val (if it isn't 0), rarity (if `unlockrates=load`; if `unlockrates=desc` and the achievement is hidden or has no description), unlock time (if `show_timestamps` is disabled). Hold `SHIFT` to include description, API name and progress stat even if the achievement is hidden. Enable `ctrl_click` in settings and hold CTRL to check names and descriptions in differnet languages.
 
 - Clicking a stat will print its API name and default value (if it isn't 0). If it is increment-only, that will be shown and its real value will be printed too.
 

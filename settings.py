@@ -49,16 +49,14 @@ def get_save_dir(appid, source, extra):
     elif source == 'codex' and extra == True:
         d += '/appdata'
     elif source in ('ali213', 'sse'):
-        if extra == None:
-            pass
-        elif (not extra[:5] == 'path:'):
+        if extra != None and (not extra[:5] == 'path:'):
             d += f'/{extra}'
-        else:
-            path = os.path.abspath(extra[5:]).lower().replace('\\', '/')
-            path_crc = zlib.crc32(bytes(path, 'utf-8'))
-            d += f'/path/{appid}_{path_crc}'
     elif source == 'steam':
         d += f'/{extra}'
+    if source in ('goldberg', 'ali213', 'sse') and extra != None and (extra[:5] == 'path:'):
+        path = os.path.abspath(extra[5:]).lower().replace('\\', '/')
+        path_crc = zlib.crc32(bytes(path, 'utf-8'))
+        d += f'/path/{appid}_{path_crc}'
     return d
 
 def load_emulator_defaults():

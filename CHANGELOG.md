@@ -1,3 +1,11 @@
+## v1.4.2
+- Achievement language is now chosen separately for name and description. Since v1.3.0, it was assumed that the two lists of available languages are always the same, so the description language availability check was removed. An example where this causes a crash has now been found. Two lists of languages will now be printed for such achievements on click.
+- Separate save dirs for `path:` saves for Goldberg (like for other emulators with `path:`)
+- Fix inability to type `v` in search because of the `Ctrl+V` check
+- Disable printing `~` info in search
+- Fix stats not loading for `local_save` Goldberg saves
+- Fix `unlockrates=desc` causing a crash if an achievement has no description
+
 ## v1.4.1
 - Fix crash on right-click outside of a history entry on history screen
 

@@ -214,12 +214,15 @@ class Achievement():
 
         self.has_desc = isinstance(self.display_name, str) or 'english' in self.description
 
-        if not isinstance(self.display_name, str):
+        if isinstance(self.display_name, dict):
             for l in stg['language']:   
                 if l in self.display_name:
                     self.display_name = self.display_name[l]
-                    if self.has_desc:
-                        self.description = self.description[l]
+                    break
+        if self.has_desc and isinstance(self.description, dict):
+            for l in stg['language']:   
+                if l in self.description:
+                    self.description = self.description[l]
                     break
 
         self.unlock = False
@@ -264,7 +267,7 @@ class Achievement():
             self.rarity_text = ' (' + str(self.rarity) + '%)'
             if stg['unlockrates'] == 'name':
                 self.display_name += self.rarity_text
-            elif stg['unlockrates'] == 'desc':
+            elif stg['unlockrates'] == 'desc' and self.has_desc:
                 self.description += self.rarity_text
 
 achs_obj = []

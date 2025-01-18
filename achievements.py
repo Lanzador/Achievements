@@ -51,21 +51,12 @@ class Achievement:
 
         self.has_desc = isinstance(self.display_name, str) or 'english' in self.description
         self.long_desc = False
-        self.long_hidden_desc = False
 
-        self.language = 'english'
-        if isinstance(self.display_name, str):
-            self.display_name_l = self.display_name
-            self.description_l = self.description
+        self.language, self.display_name_l = self.pick_language(self.display_name, stg)
+        if self.has_desc:
+            self.language_d, self.description_l = self.pick_language(self.description, stg)
         else:
-            if stg != None:
-                for l in stg['language']:
-                    if l in self.display_name:
-                        self.language = l
-                        break
-            self.display_name_l = self.display_name[self.language]
-            if self.has_desc:
-                self.description_l = self.description[self.language]
+            self.language_d = self.language
 
         self.display_name_np = self.display_name_l
         self.rarity = -1.0
@@ -76,6 +67,19 @@ class Achievement:
             self.rarity_text = ' (' + str(self.rarity) + '%)'
             if stg != None and self.rarity != -1.0 and self.rarity < stg['rare_below']:
                 self.rare = True
+
+    def pick_language(self, data, stg):
+        language = 'english'
+        if isinstance(data, str):
+            translation = data
+        else:
+            if stg != None:
+                for l in stg['language']:
+                    if l in data:
+                        language = l
+                        break
+            translation = data[language]
+        return (language, translation)
 
     def get_ts(self, savetime_shown):
         if savetime_shown == 'first':
