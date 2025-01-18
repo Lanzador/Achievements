@@ -117,6 +117,20 @@ def find_a(ach):
         return achs[ach_idxs[ach]]
     return ach
 
+def get_hover(api_name=False):
+    ach = 0
+    if hover_ach != None:
+        ach = scroll + hover_ach
+    if ach >= len(achs_f):
+        ach = 0
+    ach = achs_f[ach]
+    if ach.icon_gray == 'hidden_dummy_ach_icon':
+        ach = achs_f[0]
+    if api_name:
+        return ach.name
+    else:
+        return ach
+
 def unlock(a):
     if not a in achieved_json:
         achieved_json[a] = {}
@@ -149,6 +163,10 @@ def edit(n):
         p = os.path.dirname(get_player_achs_path(achdata_source, appid, source_extra))
     elif n in (5, 'v'):
         p = os.path.abspath(save_dir)
+    elif n in (6, 'c'):
+        p = os.path.abspath(f'games/{appid}')
+    elif n in (7, 'g'):
+        p = os.path.abspath('settings/settings.txt')
     if p != None:
         if not(os.path.exists(p)):
             print(p, 'does not exist')
@@ -344,9 +362,6 @@ def send_steam_request(name, link):
             except requests.exceptions.JSONDecodeError:
                 print(f'JSON decode error ({name})')
                 return None
-            if name == 'GetSchemaForGame':
-                with open('schematest.txt', 'w') as f:
-                    json.dump(r, f, indent=4)
             try:
                 skey = 'playerstats'
                 if name == 'appdetails':
@@ -421,12 +436,12 @@ def draw_ach(i, force_bottom=False):
         scroll = i - (achs_to_show - 1)
 
     font_regular = font_achs_regular[achs_f[i].language]
-    font_small = font_achs_small[achs_f[i].language]
+    font_small = font_achs_small[achs_f[i].language_d]
 
     bar_length = stg['bar_length']
 
     can_show_desc = not achs_f[i].hidden or (achs_f[i].earned and not hide_all_secrets) or reveal_secrets
-    long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language])
+    long_desc = (can_show_desc and achs_f[i].long_desc) or (not can_show_desc and long_hidden_desc[achs_f[i].language_d])
 
     if achs_f[i].progress != None:
         bar_hidden_unlock = stg['bar_unlocked'] == 'hide' and achs_f[i].earned
@@ -635,7 +650,6 @@ def draw_achs():
                 ach_y = header_h + 74 * (i - scroll)
 
                 can_show_desc = not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets
-                if ach.name == 'A_MIGHTY_ANNIVERSARY': print(can_show_desc)
                 hovered_over = hover_ach == i - scroll and hover_ach_horiz == idx % achs_to_show_horiz
                 if ach.earned:
                     if stg['frame_size'] > 0:
@@ -751,16 +765,17 @@ def draw_history():
 
     for i in range(scroll_history, min(scroll_history + achs_to_show + 1, len(history))):
 
-        l = 'english'
         if 'ach' in history[i]:
-            l = history[i]['ach'].language
-        font_regular = font_achs_regular[l]
-        font_small = font_achs_small[l]
+            font_regular = font_achs_regular[history[i]['ach'].language]
+            font_small = font_achs_small[history[i]['ach'].language_d]
+        else:
+            font_regular = font_achs_regular['english']
+            font_small = font_achs_small['english']
 
         hovered_over = hover_ach == i - scroll_history
         if 'ach' in history[i]:
             can_show_desc = not history[i]['ach'].hidden or (history[i]['type'] == 'unlock' and not hide_all_secrets) or reveal_secrets
-            long_desc = (can_show_desc and history[i]['ach'].long_desc) or (not can_show_desc and long_hidden_desc[history[i]['ach'].language])
+            long_desc = (can_show_desc and history[i]['ach'].long_desc) or (not can_show_desc and long_hidden_desc[history[i]['ach'].language_d])
             hide_bar_and_time = hovered_over and long_desc
 
         desc_max_lines = 2
@@ -1589,6 +1604,7 @@ def load_everything(reload=False, keep_data=False):
                 ach_icons[achs[i].icon_gray] = None
 
         languages_used.add(achs[i].language)
+        languages_used.add(achs[i].language_d)
 
         if achs[i].earned_time == 'stat_last_change':
             achs[i].earned_time, achs[i].ts_first, achs[i].ts_earliest = [get_stat_last_change(achs[i].progress.value['operand1'])] * 3
@@ -1729,13 +1745,13 @@ def load_everything(reload=False, keep_data=False):
 
     for ach in achs:
         if ach.has_desc:
-            ach.long_desc = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[ach.language], ach.description_l, None, (0, 0, 0), True)
+            ach.long_desc = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[ach.language_d], ach.description_l, None, (0, 0, 0), True)
         if ach.rarity == -1.0:
             continue
         if stg['unlockrates'] == 'name':
             ach.display_name_l = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[ach.language].size(ach.rarity_text)[0], font_achs_regular[ach.language], ach.display_name_l, None, (0, 0, 0), True)
             ach.display_name_l += ach.rarity_text
-        elif stg['unlockrates'] == 'desc':
+        elif stg['unlockrates'] == 'desc' and ach.has_desc:
             ach.description_l += ach.rarity_text
 
     achs_f = filter_achs(achs, state_filter, stg)
@@ -2092,6 +2108,7 @@ while running:
 
         elif event.type == pygame.KEYDOWN:
             if header_extra == 'search':
+                keys = pygame.key.get_pressed()
                 if event.key == pygame.K_RETURN:
                     scroll_achs_copy = scroll
                     state_filter_copy = state_filter
@@ -2101,10 +2118,8 @@ while running:
                     filter_needed = True
                 elif event.key == pygame.K_BACKSPACE:
                     search_request = search_request[:-1]
-                elif event.key == pygame.K_v:
-                    keys = pygame.key.get_pressed()
-                    if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
-                        search_request += pyperclip.paste()
+                elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    search_request += pyperclip.paste()
                 else:
                     search_request += event.unicode
                 flip_required = True
@@ -2206,7 +2221,7 @@ while running:
                         viewing_before_console = viewing
                         viewing = 'console'
                         flip_required = True
-                else:
+                elif header_extra != 'search':
                     xnote = ''
                     if achdata_source == 'goldberg' and source_extra == 'f':
                         xnote = ' ("GSE Saves" fork)'
@@ -2216,7 +2231,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.4.1e2')
+                    print(' - Version: v1.4.2e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -2354,6 +2369,8 @@ while running:
                             for i in range(len(achs_f)):
                                 if achs_f[i].name == ach.name:
                                     scroll = i
+                                    if grid_view:
+                                        scroll //= achs_to_show_horiz
                                     break
             if event.button != 1:
                 continue
@@ -2366,14 +2383,24 @@ while running:
                     elif search_request == '':
                         pass
                     elif pygame.Rect(stg['window_size_x'] - 96, 10, 22, 22).collidepoint(event.pos):
-                        for i in range(scroll - 1, -1, -1):
+                        s = scroll - 1
+                        if grid_view:
+                            s = scroll * achs_to_show_horiz - 1
+                        for i in range(s, -1, -1):
                             if check_search_match(achs_f[i], search_request):
                                 scroll = i
+                                if grid_view:
+                                    scroll //= achs_to_show_horiz
                                 break
                     elif pygame.Rect(stg['window_size_x'] - 64, 10, 22, 22).collidepoint(event.pos):
-                        for i in range(scroll + 1, len(achs_f)):
+                        s = scroll + 1
+                        if grid_view:
+                           s = (scroll + 1) * achs_to_show_horiz
+                        for i in range(s, len(achs_f)):
                             if check_search_match(achs_f[i], search_request):
                                 scroll = i
+                                if grid_view:
+                                    scroll //= achs_to_show_horiz
                                 break
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
                         scroll_achs_copy = scroll
@@ -2548,8 +2575,10 @@ while running:
                 try:
                     if show_hidden_info:
                         print(f' - API name: {a.name}')
-                    if not isinstance(a.display_name, str):
-                        print(f" - Languages: {', '.join(a.display_name.keys())}")
+                    if isinstance(a.display_name, dict):
+                        print(f" - Languages: {', '.join(a.display_name)}")
+                        if a.has_desc and isinstance(a.description, dict) and set(a.display_name) != set(a.description):
+                            print(f" - Languages (desc): {', '.join(a.description)}")
                     print(f' - Hidden: {a.hidden}')
                     if a.progress != None and 'operand1' in a.progress.value and show_hidden_info:
                         s = a.progress.value['operand1']
@@ -2558,13 +2587,13 @@ while running:
                         print(f' - Progress stat: {s}')
                         if a.progress.min_val != 0:
                             print(f' - Progress min val: {a.progress.min_val}')
-                    if (stg['unlockrates'] == 'load' or (stg['unlockrates'] == 'desc' and not show_hidden_info)) and a.rarity != -1.0:
+                    if (stg['unlockrates'] == 'load' or (stg['unlockrates'] == 'desc' and (not show_hidden_info or not a.has_desc))) and a.rarity != -1.0:
                         print(f' - Rarity: {a.rarity}%')
                     if not stg['show_timestamps'] and a.earned:
                         print(f' - Unlocked: {a.get_time(stg)}')
                 except Exception as ex:
                     print(f'Error when printing achievement info: {type(ex).__name__}')
-                if stg['ctrl_click'] and not isinstance(a.display_name, str) and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                if stg['ctrl_click'] and isinstance(a.display_name, dict) and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     try:
                         l = input('Choose a language: ')
                     except RuntimeError:

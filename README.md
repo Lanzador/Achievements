@@ -57,6 +57,8 @@ These functions can be used through `Ctrl+E`.
 
 `find_a(ach)` - returns achievement object based on API name or index.
 
+`get_hover(api_name=False)` - returns achievement object or API name for achievement currently hovered over.
+
 `unlock(a)` - show an achievement as unlocked. Doesn't change emulator save. `a` is an API name.
 
 `unlock_all()` - show all achievements as unlocked. Doesn't change emulator save.
@@ -72,6 +74,10 @@ These functions can be used through `Ctrl+E`.
 - `n=4`, `n='f'` - folder containing achievements file.
 
 - `n=5`, `n='v'` - save dir (in `save`).
+
+- `n=6`, `n='c'` - config dir
+
+- `n=7`, `n='g'` - `settings.txt`
 
 `defset()` - set default settings.
 

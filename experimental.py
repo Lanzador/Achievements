@@ -1,6 +1,4 @@
 import time
-import pygame
-from settings import *
 
 print_real = print
 internal_console = []
