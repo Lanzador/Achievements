@@ -1,6 +1,6 @@
 ## v1.4.3e1
 - If `exp_history_autosave_auto` is enabled and saved history already exists, enable history autosave, so that it actually works like it should
-- Allow passing an achievement object or index to `find_a()`
+- Allow passing an achievement object or index to `unlock()`
 
 ## v1.4.2e1
 - New `edit()` values
