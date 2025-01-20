@@ -1,3 +1,7 @@
+## v1.4.3
+- Don't send progress notification if reported progress is 0. Prevents notification spam when achievement progress file is created by Goldberg fork.
+- Print "Font file not found" instead of throwing an error for `font_general` (like for other fonts)
+
 ## v1.4.2
 - Achievement language is now chosen separately for name and description. Since v1.3.0, it was assumed that the two lists of available languages are always the same, so the description language availability check was removed. An example where this causes a crash has now been found. Two lists of languages will now be printed for such achievements on click.
 - Separate save dirs for `path:` saves for Goldberg (like for other emulators with `path:`)

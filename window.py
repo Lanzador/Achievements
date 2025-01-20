@@ -1297,6 +1297,9 @@ if platform.uname().system == 'Windows' and stg['notif_icons'] and stg['notif_ic
 
 ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
 
+if not os.path.isfile(os.path.join('fonts', stg['font_general'])):
+    print('Font file not found (general)')
+    sys.exit()
 font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
 font_achs_regular = {}
 font_achs_small = {}
@@ -1563,7 +1566,7 @@ while running:
                         elif not lock_all_notified:
                             create_notification('lock_all', change)
                             lock_all_notified = True
-                elif change['type'] == 'progress_report':
+                elif change['type'] == 'progress_report' and change['value'][0] > 0:
                     create_notification('progress_report', change)
 
         if achdata_source == 'steam' or stats_delay_counter >= stg['delay_stats']:
@@ -1771,7 +1774,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.2')
+                print(' - Version: v1.4.3')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
