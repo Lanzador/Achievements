@@ -38,7 +38,7 @@ There are some settings exclusive to this version.
 
 `exp_history_autosave_clear` - behavior when history is cleared while autosave is enabled. `save` - save empty history (default); `disable` - disable autosave; `ignore` - keep autosave enabled, but don't save immediately.
 
-`exp_history_autosave_auto` - automatically enable history autosave when an achievement progress notification is sent. Default: `false`
+`exp_history_autosave_auto` - automatically enable history autosave when an achievement progress notification is sent or if saved history already exists. Default: `false`
 
 `exp_grid_default` - switch to grid view immediately on launch. Default: `false`
 
@@ -59,7 +59,7 @@ These functions can be used through `Ctrl+E`.
 
 `get_hover(api_name=False)` - returns achievement object or API name for achievement currently hovered over.
 
-`unlock(a)` - show an achievement as unlocked. Doesn't change emulator save. `a` is an API name.
+`unlock(a)` - show an achievement as unlocked. Doesn't change emulator save. `a` is an achievement object, API name or index.
 
 `unlock_all()` - show all achievements as unlocked. Doesn't change emulator save.
 

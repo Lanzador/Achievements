@@ -27,7 +27,11 @@ stg = {}
 for s in known_settings:
     stg[s] = known_settings[s]['default']
 stg = load_settings_file(stg, 'settings.txt')
+
 pygame.init()
+if not os.path.isfile(os.path.join('fonts', stg['font_general'])):
+    print('Font file not found (general)')
+    sys.exit()
 font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
 
 input_real = input
@@ -132,6 +136,7 @@ def get_hover(api_name=False):
         return ach
 
 def unlock(a):
+    a = find_a(a).name
     if not a in achieved_json:
         achieved_json[a] = {}
     achieved_json[a]['earned'] = True
@@ -1299,6 +1304,7 @@ def load_everything(reload=False, keep_data=False):
                 with open(f'games/{appid}/statdisplay.json') as dname_file:
                     stat_dnames = json.load(dname_file)
 
+    global save_dir
     save_dir = get_save_dir(appid, achdata_source, source_extra)
 
     # pygame.init()
@@ -1709,6 +1715,9 @@ def load_everything(reload=False, keep_data=False):
 
     ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
 
+    if not os.path.isfile(os.path.join('fonts', stg['font_general'])):
+        print('Font file not found (general)')
+        sys.exit()
     font_general = pygame.font.Font(os.path.join('fonts', stg['font_general']), stg['font_size_general'])
     font_achs_regular = {}
     font_achs_small = {}
@@ -1846,7 +1855,7 @@ def load_everything(reload=False, keep_data=False):
         if stg['history_length'] > -1:
             history.insert(0, h)
             if stg['exp_history_autosave']:
-                save_hist(f'{save_dir}/{appid}_history.json', False, True)
+                save_hist()
 
         if stg['sound']:
             if t == 'unlock':
@@ -1903,8 +1912,12 @@ def load_everything(reload=False, keep_data=False):
         ch = {'time_real': t, 'time_action': t}
         create_notification('schema_change', ch)
 
-    if not reload and stg['exp_history_autosave'] and os.path.isfile(f'{save_dir}/{appid}_history.json'):
-        load_hist(f'{save_dir}/{appid}_history.json', True)
+
+    if os.path.isfile(f'{save_dir}/{appid}_history.json'):
+        if stg['exp_history_autosave_auto']:
+            stg['exp_history_autosave'] = True
+        if not reload and stg['exp_history_autosave']:
+            load_hist()
 
     globals().update(locals())
 
@@ -1999,7 +2012,7 @@ while running:
                         elif not lock_all_notified:
                             create_notification('lock_all', change)
                             lock_all_notified = True
-                elif change['type'] == 'progress_report':
+                elif change['type'] == 'progress_report' and change['value'][0] > 0:
                     create_notification('progress_report', change)
 
         if achdata_source == 'steam' or stats_delay_counter >= stg['delay_stats']:
@@ -2231,7 +2244,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.4.2e1')
+                    print(' - Version: v1.4.3e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -2513,7 +2526,7 @@ while running:
                         history.clear()
                         if stg['exp_history_autosave']:
                             if stg['exp_history_autosave_clear'] == 'save':
-                                save_hist(f'{save_dir}/{appid}_history.json', False, True)
+                                save_hist()
                             elif stg['exp_history_autosave_clear'] == 'disable':
                                 stg['exp_history_autosave'] = False
                     else:
@@ -2707,7 +2720,7 @@ while running:
         history.pop(-1)
         popped = True
     if (popped or (len(history) > 0 and unreads_in_history and history[0]['unread'] == 0)) and stg['exp_history_autosave']:
-        save_hist(f'{save_dir}/{appid}_history.json', False, True)
+        save_hist()
     while stg['exp_console_max_lines'] != 0 and len(internal_console) > stg['exp_console_max_lines']:
         internal_console.pop(0)
         console_lines_erased += 1
