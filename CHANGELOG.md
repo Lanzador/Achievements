@@ -1,3 +1,8 @@
+## v1.4.4e1
+- New `edit()` values
+- Fix `list_langs()` error if language is available for name, but not description
+- `f_unlock()` added
+
 ## v1.4.3e1
 - If `exp_history_autosave_auto` is enabled and saved history already exists, enable history autosave, so that it actually works like it should
 - Allow passing an achievement object or index to `unlock()`

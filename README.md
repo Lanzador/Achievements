@@ -55,29 +55,33 @@ There are some settings exclusive to this version.
 ## Functions
 These functions can be used through `Ctrl+E`.
 
-`find_a(ach)` - returns achievement object based on API name or index.
+`find_a(ach)` - returns achievement object based on API name or index (internal order, not sorted order).
 
-`get_hover(api_name=False)` - returns achievement object or API name for achievement currently hovered over.
+`get_hover(api_name=False)` - returns achievement object or API name for achievement currently hovered over. If not hovering over an achievement, returns the first achievement.
 
 `unlock(a)` - show an achievement as unlocked. Doesn't change emulator save. `a` is an achievement object, API name or index.
 
+`f_unlock(a)` - force-unlock an achievement. It will be kept unlocked between sessions. `a` is an achievement object, API name or index.
+
 `unlock_all()` - show all achievements as unlocked. Doesn't change emulator save.
 
-`edit(n)` - opens files and fodlers related to the current game.
+`edit(n)` - opens files and folders related to the current game.
 
 - `n=1`, `n='a'` - achievements file
 
-- `n=2`, `n='s'` - stats file.
+- `n=2`, `n='s'` - stats file
 
-- `n=3`, `n='as'`, `n='b'` - both files.
+- `n=3`, `n='as'`, `n='b'` - both files
 
-- `n=4`, `n='f'` - folder containing achievements file.
+- `n=4`, `n='f'` - folder containing achievements file
 
-- `n=5`, `n='v'` - save dir (in `save`).
+- `n=5`, `n='sv'`, `n='v'` - save dir (in `save`)
 
 - `n=6`, `n='c'` - config dir
 
 - `n=7`, `n='g'` - `settings.txt`
+
+- `n=8`, `n='al'` - `alias.txt`
 
 `defset()` - set default settings.
 
