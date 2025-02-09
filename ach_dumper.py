@@ -42,7 +42,7 @@ def send_steam_request(name, link):
         print(f'Unhandled request error: {type(ex).__name__} ({name})')
     return None
 
-known_args = ['-u', '-l', '-h', '-sn', '-sh', '-sb', '-s', '-r', '-uot', '-t']
+known_args = ['-u', '-l', '-h', '-lh', '-sn', '-sh', '-sb', '-s', '-r', '-uot', '-t']
 args_count = len(sys.argv)
 for a in sys.argv:
     args_count -= int(a in known_args)
@@ -263,7 +263,7 @@ class Achievement():
         self.rarity = -1.0
         self.rarity_text = ''
         if self.name in p:
-            self.rarity = round(p[self.name] * 10) / 10
+            self.rarity = float(p[self.name])
             self.rarity_text = ' (' + str(self.rarity) + '%)'
             if stg['unlockrates'] == 'name':
                 self.display_name += self.rarity_text
@@ -291,6 +291,7 @@ if '-u' in sys.argv:
 elif '-l' in sys.argv:
     filt = False
 hide_descs = '-h' in sys.argv
+secrets_listhide = '-lh' in sys.argv
 stats_only = '-s' in sys.argv
 rarity_sort = '-r' in sys.argv
 unlocks_on_top = '-uot' in sys.argv
@@ -345,8 +346,14 @@ for a in achs_obj:
         secrets_list.append(a)
         continue
 
-    text += '\n\n' + a.display_name
-    if not a.hidden or (a.unlock and not hide_descs):
+    can_show_desc = not a.hidden or (a.unlock and not hide_descs)
+
+    if secrets_listhide and not can_show_desc:
+        text += '\n\n' + stg['hidden_title']
+    else:
+        text += '\n\n' + a.display_name
+
+    if can_show_desc:
         if a.has_desc:
             text += '\n' + a.description
     elif len(stg['hidden_desc']) > 0:
@@ -366,7 +373,10 @@ if secrets == 'bottom' and len(secrets_list) > 0 and filt != True:
         text += f'\n\nThere are {len(secrets_list)} more hidden achievements'
 
     for a in secrets_list:
-        text += '\n\n' + a.display_name
+        if secrets_listhide:
+            text += '\n\n' + stg['hidden_title']
+        else:
+            text += '\n\n' + a.display_name
         if len(stg['hidden_desc']) > 0:
             text += '\n' + stg['hidden_desc']
         text += '\n[Locked]'

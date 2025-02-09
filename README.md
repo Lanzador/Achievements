@@ -154,6 +154,10 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `secrets` - hidden achievements. `normal` - show without descriptions; `hide` - remove from the list, like on Steam (default); `bottom` - move to the bottom of the list.
 
+`secrets_listhide` - in addition to descriptions, also hide secret achievements' names and icons. Default: `false`
+
+`secrets_bottom_count` - show the hidden achievements count line when `secrets=bottom`. Default: `true`
+
 `reveal_icons_hover` - show unlocked icons for locked achievements on hover (except hidden achievements). Default: `false`
 
 `reveal_icons_revsecr` - show unlocked icons for locked achievements in "reveal secret achievements" mode. `never` - no changes; `hover` - on hover, even if `reveal_icons_hover` is disabled (default); `always` - show all icons as unlocked in this mode.

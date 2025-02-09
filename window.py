@@ -179,7 +179,8 @@ def draw_achs():
             screen.blit(timesortbutton[stg['unlocks_timesort']], (stg['window_size_x'] - 64, 10))
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
         elif header_extra == 'secrets':
-            draw_game_progress(stg['window_size_x'] - 148)
+            draw_game_progress(stg['window_size_x'] - 180)
+            screen.blit(secretsLHbutton[stg['secrets_listhide']], (stg['window_size_x'] - 160, 10))
             screen.blit(secretsNbutton[stg['secrets'] == 'normal'], (stg['window_size_x'] - 128, 10))
             screen.blit(secretsHbutton[stg['secrets'] == 'hide'], (stg['window_size_x'] - 96, 10))
             screen.blit(secretsBbutton[stg['secrets'] == 'bottom'], (stg['window_size_x'] - 64, 10))
@@ -279,7 +280,10 @@ def draw_achs():
                 length = achs_f[i].rarity * (stg['window_size_x'] - 84 - stg['frame_size']) / max_val
             pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll) * 74 - stg['frame_size'], length, 64 + stg['frame_size'] * 2))
 
-        long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), ach_text_color)
+        if stg['secrets_listhide'] and not can_show_desc:
+            long_text(screen, stg['window_size_x'] - 94, font_regular, stg['hidden_title'], (84, header_h + (i - scroll) * 74), ach_text_color)
+        else:
+            long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), ach_text_color)
         if not can_show_desc:
             multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
         elif achs_f[i].has_desc:
@@ -324,7 +328,9 @@ def draw_achs():
                 if hovered_over and stg['frame_color_hover'] != None:
                     frame_color = stg['frame_color_hover']
                 pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
+            if stg['secrets_listhide'] and not can_show_desc:
+                screen.blit(hiddenunlockicon, (10, header_h + (i - scroll) * 74))
+            elif achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
                 screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
@@ -351,7 +357,9 @@ def draw_achs():
                 if hovered_over and stg['frame_color_hover'] != None:
                     frame_color = stg['frame_color_hover']
                 pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
-            if reveal_icon and achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
+            if stg['secrets_listhide'] and not can_show_desc:
+                screen.blit(hiddenlockicon, (10, header_h + (i - scroll) * 74))
+            elif reveal_icon and achs_f[i].icon != None and ach_icons[achs_f[i].icon] != None:
                 screen.blit(ach_icons[achs_f[i].icon], (10, header_h + (i - scroll) * 74))
             elif achs_f[i].icon_gray != None and ach_icons[achs_f[i].icon_gray] != None:
                 screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
@@ -589,11 +597,14 @@ def ach_dumper():
                 text += '\n\n' + a.description_l
                 continue
 
-            text += '\n\n' + a.display_name_np
-            if stg_ad['unlockrates'] == 'name':
-                text += a.rarity_text
-
             can_show_desc = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets
+
+            if stg['secrets_listhide'] and not can_show_desc:
+                text += '\n\n' + stg_ad['hidden_title']
+            else:
+                text += '\n\n' + a.display_name_np
+                if stg_ad['unlockrates'] == 'name':
+                    text += a.rarity_text
 
             if can_show_desc:
                 if a.has_desc:
@@ -611,7 +622,7 @@ def ach_dumper():
             else:
                 text += '\n[Locked]'
 
-            if a.progress != None and (can_show_desc or not stg['bar_hide_secret']):
+            if a.progress != None and (can_show_desc or not stg_ad['bar_hide_secret']):
                 val = a.progress.current_value
                 if stg_ad['bar_ignore_min']:
                     val = a.progress.real_value
@@ -972,9 +983,12 @@ timesortbutton = {False: load_image('sort_time0.png'), True: load_image('sort_ti
 secretsNbutton = {False: load_image('sort_secrets_n0.png'), True: load_image('sort_secrets_n1.png')}
 secretsHbutton = {False: load_image('sort_secrets_h0.png'), True: load_image('sort_secrets_h1.png')}
 secretsBbutton = {False: load_image('sort_secrets_b0.png'), True: load_image('sort_secrets_b1.png')}
+secretsLHbutton = {False: load_image('sort_secrets_lh0.png'), True: load_image('sort_secrets_lh1.png')}
 revealbutton = {False: load_image('sort_secrets_reveal0.png'), True: load_image('sort_secrets_reveal1.png')}
 hidebutton = {False: load_image('sort_secrets_hideall0.png'), True: load_image('sort_secrets_hideall1.png')}
 schemachangeicon = load_image('schema_change.png')
+hiddenlockicon = load_image('hidden_lock.png')
+hiddenunlockicon = load_image('hidden_unlock.png')
 
 btn_locs = {}
 btn_locs['stats'] = button_location(statsbutton)
@@ -1295,7 +1309,7 @@ if platform.uname().system == 'Windows' and stg['notif_icons'] and stg['notif_ic
                 print('Icon converter not found')
             print('------------------------------')
 
-ach_icons['hidden_dummy_ach_icon'] = pygame.image.load('images/hidden.png')
+ach_icons['hidden_dummy_ach_icon'] = load_image('hidden.png')
 
 if not os.path.isfile(os.path.join('fonts', stg['font_general'])):
     print('Font file not found (general)')
@@ -1390,10 +1404,13 @@ def check_search_match(ach, rq):
         return not ach.hidden
     elif rq == '#progress':
         return ach.progress != None
+    can_show_desc = not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets
+    if stg['secrets_listhide'] and not can_show_desc:
+        return False
     rq = rq.lower()
     if rq in ach.display_name_np.lower():
         return True
-    if ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
+    if ach.has_desc and can_show_desc:
         d = ach.description_l
         if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
             d = d[: -len(ach.rarity_text)]
@@ -1762,6 +1779,7 @@ while running:
                         command += ' -t' * stg['unlocks_timesort']
                     command += ' -s' + stg['secrets'][0]
                     command += ' -h' * hide_all_secrets
+                    command += ' -lh' * stg['secrets_listhide']
                     command += ' -s' * (viewing == 'stats')
                     os.system(command)
             elif event.key == pygame.K_BACKQUOTE and header_extra != 'search':
@@ -1774,14 +1792,14 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.3')
+                print(' - Version: v1.4.4')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
                 old_hover_ach = hover_ach
                 hover_ach = None
                 for i in range(achs_to_show + 1):
-                    if pygame.Rect(10, header_h + i * 74 - stg['frame_size'], stg['window_size_x'] - 20, 64 + stg['frame_size'] * 2).collidepoint(event.pos):
+                    if pygame.Rect(10 - stg['frame_size'], header_h + i * 74 - stg['frame_size'], stg['window_size_x'] - 20 + stg['frame_size'], 64 + stg['frame_size'] * 2).collidepoint(event.pos):
                         hover_ach = i
                         break
                 if hover_ach != old_hover_ach:
@@ -1872,7 +1890,10 @@ while running:
                         else:
                             header_extra = 'search_results'
                 elif header_extra == 'secrets':
-                    if pygame.Rect(stg['window_size_x'] - 128, 10, 22, 22).collidepoint(event.pos):
+                    if pygame.Rect(stg['window_size_x'] - 160, 10, 22, 22).collidepoint(event.pos):
+                        stg['secrets_listhide'] = not stg['secrets_listhide']
+                        filter_needed = True
+                    elif pygame.Rect(stg['window_size_x'] - 128, 10, 22, 22).collidepoint(event.pos):
                         stg['secrets'] = 'normal'
                         filter_needed = True
                     elif pygame.Rect(stg['window_size_x'] - 96, 10, 22, 22).collidepoint(event.pos):
@@ -1978,6 +1999,8 @@ while running:
                     continue
                 keys = pygame.key.get_pressed()
                 show_hidden_info = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
+                if stg['secrets_listhide'] and not show_hidden_info:
+                    continue
                 print()
                 try:
                     print(a.display_name_np)

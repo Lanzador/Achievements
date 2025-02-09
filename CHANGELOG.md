@@ -1,3 +1,12 @@
+## v1.4.4
+- `secrets_listhide` - hide title and icon for secret achievements (instead of only hiding description), also available through in-app secrets menu
+- `secrets_bottom_count` - can be disabled to remove the hidden achievement count line for `secrets=bottom`
+- Adapt to Steam API's new unlock rates format (it was suddenly changed which caused crashes)
+- React to hovering over left and right sides of the achievement icon frame
+- Include empty `sounds` folder in release
+- Fix "hidden achievements" icon not being affected by `images` setting
+- Fix internal ach dumper using `stg` instead of `stg_ad` for `bar_hide_secret`
+
 ## v1.4.3
 - Don't send progress notification if reported progress is 0. Prevents notification spam when achievement progress file is created by Goldberg fork.
 - Print "Font file not found" instead of throwing an error for `font_general` (like for other fonts)

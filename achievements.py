@@ -63,7 +63,7 @@ class Achievement:
         self.rarity_text = ''
         self.rare = False
         if self.name in ach_percentages:
-            self.rarity = round(ach_percentages[self.name] * 10) / 10
+            self.rarity = float(ach_percentages[self.name])
             self.rarity_text = ' (' + str(self.rarity) + '%)'
             if stg != None and self.rarity != -1.0 and self.rarity < stg['rare_below']:
                 self.rare = True
@@ -182,7 +182,7 @@ def filter_achs(achs, state, stg):
             insert_at -= secrets_hidden
         achs_f.insert(insert_at, ach)
 
-    if state != 1 and secrets_hidden > 0:
+    if state != 1 and secrets_hidden > 0 and not (stg['secrets'] == 'bottom' and not stg['secrets_bottom_count']):
         insert_at = len(achs_f)
         if stg['secrets'] == 'bottom':
             insert_at = -secrets_hidden
