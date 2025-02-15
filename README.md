@@ -376,7 +376,7 @@ If no arguments are provided, you will be able to choose a grouping mode interac
 ### ach_dumper
 This script writes the achievement list for a given game to a text file which you can send to others to show your progress without screenshoting each page of the list.
 
-Settings used: `language`, `language_requests`, `savetime_shown`, `bar_hide_secret`, `bar_ignore_min`, `unlockrates`, `secrets`, `stat_display_names`, `strftime`, `api_key` (if loading progress from Steam)
+Settings used: `language`, `language_requests`, `savetime_shown`, `bar_hide_secret`, `bar_ignore_min`, `unlockrates`, `secrets`, `hidden_title`, `hidden_desc`, `stat_display_names`, `strftime`, `api_key` (if loading progress from Steam)
 
 Use `settings_ad.txt` to set separate options for ach_dumper. Works for game/emulator-specific settings, too. Just add `_ad` to the filename.
 
