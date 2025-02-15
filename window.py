@@ -124,7 +124,10 @@ def find_a(ach):
 def get_hover(api_name=False):
     ach = 0
     if hover_ach != None:
-        ach = scroll + hover_ach
+        if not grid_view:
+            ach = scroll + hover_ach
+        elif hover_ach_horiz != None:
+            ach = (scroll + hover_ach) * achs_to_show_horiz + hover_ach_horiz
     if ach >= len(achs_f):
         ach = 0
     ach = achs_f[ach]
@@ -165,33 +168,44 @@ def unlock_all():
     load_everything(True, True)
 
 def edit(n):
-    if achdata_source == 'steam' and not n in (5, 'v'):
-        print('Can only use edit() for save dir when tracking Steam')
+    values = {1: ['a'], 2: ['s'], 3: ['as', 'b'], 4: ['f'],
+              5: ['sv', 'v'], 6: ['c'], 7: ['g'], 8: ['al']}
+    for v in values:
+        if n in values[v]:
+            n = v
+    if achdata_source == 'steam' and n in (1, 2, 3, 4):
+        print("This edit() value can't be used when tracking Steam")
         return
     p = None
-    if n in (1, 'a'):
+    if n == 1:
         p = get_player_achs_path(achdata_source, appid, source_extra)
-    elif n in (2, 's'):
+    elif n == 2:
         p = get_stats_path(achdata_source, appid, source_extra)
-    elif n in (3, 'as', 'b'):
+    elif n == 3:
         edit(1)
         edit(2)
-    elif n in (4, 'f'):
+    elif n == 4:
         p = os.path.dirname(get_player_achs_path(achdata_source, appid, source_extra))
-    elif n in (5, 'sv', 'v'):
+    elif n == 5:
         p = os.path.abspath(save_dir)
-    elif n in (6, 'c'):
+        steam = True
+    elif n == 6:
         p = os.path.abspath(f'games/{appid}')
-    elif n in (7, 'g'):
+        steam = True
+    elif n == 7:
         p = os.path.abspath('settings/settings.txt')
-    elif n in (8, 'al'):
+        steam = True
+    elif n == 8:
         p = os.path.abspath('games/alias.txt')
+        steam = True
     if p != None:
         if not(os.path.exists(p)):
             print(p, 'does not exist')
             return
         import webbrowser
         webbrowser.open(p)
+    else:
+        print('Unknown edit() value')
 
 def defset():
     for s in stg:
@@ -2017,6 +2031,7 @@ while running:
 
             if achdata_source != 'goldberg' and newdata != None:
                 newdata = convert_achs_format(newdata, achdata_source, achs_crc32)
+                achieved_json = newdata # To avoid Ctrl+Shift+R reverting progress
 
             achs, changes = update_achs(achs, newdata, fchecker_achieved, stg)
 
@@ -2281,7 +2296,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.4.4e1')
+                    print(' - Version: v1.4.5e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -2613,10 +2628,16 @@ while running:
                     continue
                 if a.icon_gray == 'hidden_dummy_ach_icon':
                     continue
+
                 keys = pygame.key.get_pressed()
                 show_hidden_info = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
                 if stg['secrets_listhide'] and not show_hidden_info:
+                    if a.rarity != -1.0:
+                        print()
+                        print(stg['hidden_title'])
+                        print(f' - Rarity: {a.rarity}%')
                     continue
+
                 print()
                 try:
                     print(a.display_name_np)
@@ -2627,6 +2648,7 @@ while running:
                         print(d)
                 except Exception as ex:
                     print(f'Error when printing name/description: {type(ex).__name__}')
+
                 try:
                     if show_hidden_info:
                         print(f' - API name: {a.name}')
@@ -2648,6 +2670,7 @@ while running:
                         print(f' - Unlocked: {a.get_time(stg)}')
                 except Exception as ex:
                     print(f'Error when printing achievement info: {type(ex).__name__}')
+
                 if stg['ctrl_click'] and isinstance(a.display_name, dict) and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     try:
                         l = input('Choose a language: ')

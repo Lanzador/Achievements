@@ -1,3 +1,8 @@
+## v1.4.5e1
+- Fix `get_hover()` in grid view
+- Fix `edit()` values 6-8 not working when tracking Steam; warn if `edit()` value is unknown
+- Fix `Ctrl+Shift+R` restoring old achievement states from when the program was launched
+
 ## v1.4.4e1
 - New `edit()` values
 - Fix `list_langs()` error if language is available for name, but not description
