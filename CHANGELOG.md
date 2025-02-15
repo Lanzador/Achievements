@@ -1,3 +1,7 @@
+## v1.4.5
+- Allow clicking hidden achievements with `secrets_listhide` enabled to check their rarity
+- Include `images/white/sort_secrets_lh1.png`
+
 ## v1.4.4
 - `secrets_listhide` - hide title and icon for secret achievements (instead of only hiding description), also available through in-app secrets menu
 - `secrets_bottom_count` - can be disabled to remove the hidden achievement count line for `secrets=bottom`

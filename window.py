@@ -1792,7 +1792,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.4')
+                print(' - Version: v1.4.5')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -1997,10 +1997,16 @@ while running:
                     continue
                 if a.icon_gray == 'hidden_dummy_ach_icon':
                     continue
+
                 keys = pygame.key.get_pressed()
                 show_hidden_info = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
                 if stg['secrets_listhide'] and not show_hidden_info:
+                    if a.rarity != -1.0:
+                        print()
+                        print(stg['hidden_title'])
+                        print(f' - Rarity: {a.rarity}%')
                     continue
+
                 print()
                 try:
                     print(a.display_name_np)
@@ -2011,6 +2017,7 @@ while running:
                         print(d)
                 except Exception as ex:
                     print(f'Error when printing name/description: {type(ex).__name__}')
+
                 try:
                     if show_hidden_info:
                         print(f' - API name: {a.name}')
@@ -2032,6 +2039,7 @@ while running:
                         print(f' - Unlocked: {a.get_time(stg)}')
                 except Exception as ex:
                     print(f'Error when printing achievement info: {type(ex).__name__}')
+
                 if stg['ctrl_click'] and isinstance(a.display_name, dict) and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     try:
                         l = input('Choose a language: ')
