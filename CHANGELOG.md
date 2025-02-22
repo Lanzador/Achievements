@@ -1,3 +1,6 @@
+## v1.4.6
+- Fix achievement progress bar error display
+
 ## v1.4.5
 - Allow clicking hidden achievements with `secrets_listhide` enabled to check their rarity
 - Include `images/white/sort_secrets_lh1.png`
