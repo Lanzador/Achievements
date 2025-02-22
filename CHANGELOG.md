@@ -1,3 +1,7 @@
+## v1.4.6e1
+- Fix `sound_multi` getting triggered because of `sound_console`
+- Fix `Ctrl+Shift+R` STILL restoring old achievement states if tracking Goldberg
+
 ## v1.4.5e1
 - Fix `get_hover()` in grid view
 - Fix `edit()` values 6-8 not working when tracking Steam; warn if `edit()` value is unknown

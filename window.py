@@ -570,7 +570,7 @@ def draw_ach(i, force_bottom=False):
                 else:
                     prg_str = bar_percentage
         else:
-            prg_str = achs[i].progress.support_error
+            prg_str = achs_f[i].progress.support_error
             prg_no_min = (0, 1)
             if stg['bar_unlocked'] in ('full', 'zerolen') and achs_f[i].earned:
                 prg_no_min = (1, 1)
@@ -1882,7 +1882,7 @@ def load_everything(reload=False, keep_data=False):
             sound_to_play = 5
         elif stg['sound_rare_over_multi'] and (sound_to_play == 3 or x == 3):
             sound_to_play = 3
-        elif sounds[4] != None and sound_to_play != 0:
+        elif sounds[4] != None and sound_to_play >= 1:
             sound_to_play = 4
         else:
             sound_to_play = max(x, sound_to_play)
@@ -2031,7 +2031,11 @@ while running:
 
             if achdata_source != 'goldberg' and newdata != None:
                 newdata = convert_achs_format(newdata, achdata_source, achs_crc32)
+
+            if newdata != None:
                 achieved_json = newdata # To avoid Ctrl+Shift+R reverting progress
+            else:
+                achieved_json.clear()
 
             achs, changes = update_achs(achs, newdata, fchecker_achieved, stg)
 
@@ -2296,7 +2300,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.4.5e1')
+                    print(' - Version: v1.4.6e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
