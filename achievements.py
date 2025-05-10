@@ -29,8 +29,8 @@ class Achievement:
         self.earned_time = 0.0
         self.progress_reported = None
         if self.name in player_achs:
-            self.earned = player_achs[self.name]['earned']
-            self.earned_time = float(player_achs[self.name]['earned_time'])
+            self.earned = player_achs[self.name].get('earned', False)
+            self.earned_time = float(player_achs[self.name].get('earned_time', 0))
             if 'progress' in player_achs[self.name] and 'max_progress' in player_achs[self.name]:
                 self.progress_reported = (player_achs[self.name]['progress'], player_achs[self.name]['max_progress'])
 

@@ -1,5 +1,6 @@
 import os
 import sys
+import platform
 import zlib
 
 def get_game_name(appid):
@@ -54,7 +55,9 @@ def get_save_dir(appid, source, extra):
     elif source == 'steam':
         d += f'/{extra}'
     if source in ('goldberg', 'ali213', 'sse') and extra != None and (extra[:5] == 'path:'):
-        path = os.path.abspath(extra[5:]).lower().replace('\\', '/')
+        path = os.path.abspath(extra[5:]).replace('\\', '/')
+        if platform.uname().system == 'Windows':
+            path = path.lower()
         path_crc = zlib.crc32(bytes(path, 'utf-8'))
         d += f'/path/{appid}_{path_crc}'
     return d
@@ -149,6 +152,8 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'frame_color_rare_lock': {'type': 'color', 'default': None},
                   'frame_color_hover': {'type': 'color', 'default': None},
                   'rare_below': {'type': 'float', 'default': 10.0},
+                  'rare_below_relative': {'type': 'bool', 'default': False},
+                  'rare_guaranteed': {'type': 'int', 'default': 0},
                   'language': {'type': 'list', 'default': ['english']},
                   'language_requests': {'type': 'str', 'default': None},
                   'ctrl_click': {'type': 'bool', 'default': False},
@@ -168,6 +173,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'bar_hide_secret': {'type': 'bool', 'default': True},
                   'bar_ignore_min': {'type': 'bool', 'default': False},
                   'bar_percentage': {'type': 'choice', 'allowed': ['no', 'show', 'only'], 'default': 'no'},
+                  'bar_images': {'type': 'bool', 'default': False},
                   'bar_force_unlock': {'type': 'bool', 'default': True},
                   'forced_keep': {'type': 'choice', 'allowed': ['no', 'session', 'save'], 'default': 'save'},
                   'forced_mark': {'type': 'bool', 'default': False},
@@ -180,6 +186,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'history_clearable': {'type': 'bool', 'default': True},
                   'notif': {'type': 'bool', 'default': True},
                   'notif_desc': {'type': 'bool', 'default': False},
+                  'notif_unlock_count': {'type': 'bool', 'default': False},
                   'notif_limit': {'type': 'int', 'default': 3},
                   'notif_timeout': {'type': 'int', 'default': 3},
                   'notif_lock': {'type': 'bool', 'default': True},

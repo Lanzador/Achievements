@@ -1,3 +1,20 @@
+## v1.5.0
+- `rare_guaranteed` - mark least common achievements as rare if there aren't enough rare achievements for a game
+- `rare_below_relative` - treat the value of `rare_below` as a percentage of the most common achievement's unlock rate
+- `bar_images` - use a repeating pattern loaded from an image to draw progress bars
+- Don't create `[AppID]_time.txt` in save dir if all achievements are locked
+- Use different save dirs for similar `path:`s with different capitalization on Linux
+- `notif_unlock_count` - include total unlock count in achievement unlock notifications
+- Don't print real value when clicking an increment-only stat if it's same as the displayed value
+- Fix crash if `achievement_images` (`img`) doesn't exist when downloading missing icons
+- Support numpad PgUp/PgDn; support Home and End
+- Print last change time when clicking a stat if tracking Goldberg
+- `force_progress.txt` - show achievement progress notification even if the game doesn't have them
+- Support `stats.json` format in game configs; allow `=` in stat names... just in case
+- Fix stat count always showing 0 after an interrupted config generation
+- A few minor changes
+- [icon_converter] Ignore AppIDs with no `achievements.json` when using `*`
+
 ## v1.4.6
 - Fix achievement progress bar error display
 

@@ -20,7 +20,7 @@ folderless = set()
 if '*' in appids:
     appids = set()
     for f in os.scandir('games'):
-        if f.is_dir() and f.name.isnumeric():
+        if f.is_dir() and f.name.isnumeric() and os.path.isfile(f'games/{f.name}/achievements.json'):
             appids.add(f.name)
 else:
     alias = []

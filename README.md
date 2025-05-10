@@ -29,7 +29,7 @@ To get data about achievements and stats, this program relies on game configs ge
 
 Versions of this script from forks of Goldberg may have a different config format. One of such alternative formats is supported: the one that stores achievement icons in `img` instead of `achievement_images` and has this `img/` in icon names in `achievements.json`. I found this version of the script to be more reliable and fast.
 
-The only required files are: `achievements.json`, `stats.txt` and `achievement_images` (or `img`). This is what a correctly installed game config should look like:
+The only required files are: `achievements.json`, `stats.txt` (or `stats.json`) and `achievement_images` (or `img`). This is what a correctly installed game config should look like:
 ```
 Achievements
 └───games
@@ -144,6 +144,10 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `rare_below` - rarity percentage below which achievements are considered "rare" for the above settings. Default: `10.0`
 
+`rare_below_relative` - if enabled, the value of `rare_below` will be treated as a percentage of the most common achievement's unlock rate. Default: `false`
+
+`rare_guaranteed` - the minimal amount of rare achievements a game should have. If there are too few, `rare_below` will be adjusted automatically. Default: `0`
+
 `language` - comma-separated (no spaces) list of languages to use for achievements. First available language is used. If nothing is available, English is used. Default: `english`
 
 `language_requests` - language to use for Steam requests (such as game names). If empty, the first language from `language` will be used. Default: Empty
@@ -180,6 +184,8 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `bar_percentage` - show achievement progress as a percentage. `no` - don't show (default); `show` - show next to normal values; `only` - show instead of normal values.
 
+`bar_images` - if enabled, `color_bar_` settings are ignored. Instead, `bar_bg.png`, `bar_fill.png` and `bar_completed.png` are used as repeating patterns. Default: `false`
+
 `bar_force_unlock` - automatically unlock an achievement when its progress target is reached (most emulators don't do that). Default: `true`
 
 `forced_keep` - keep "force-unlocked" achievements even if the progress value drops below the achievement's target. Changing this is rather useless. `no` - don't keep; `session` - keep until the program is closed and don't save timestamps; `save` - save these unlocks in a file, together with their timestamps (default).
@@ -203,6 +209,8 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 `notif` - show system notifications. Default: `true`
 
 `notif_desc` - show achievement descriptions in notifications (but remove notification type header). Default: `false`
+
+`notif_unlock_count` - include total unlock count in achievement unlock notifications. Default: `false`
 
 `notif_limit` - max amount of notifications to show during one check. Any extra notifications will be grouped into one. Default: `3`
 
@@ -314,9 +322,9 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 - Run `settings.py` to generate `settings/settings_default.txt`.
 
-- Clicking an achievement will print some information about it: API name, languages, hidden?, progress stat, progress min_val (if it isn't 0), rarity (if `unlockrates=load`; if `unlockrates=desc` and the achievement is hidden or has no description), unlock time (if `show_timestamps` is disabled). Hold `SHIFT` to include description, API name and progress stat even if the achievement is hidden. Enable `ctrl_click` in settings and hold CTRL to check names and descriptions in differnet languages.
+- Clicking an achievement will print some information about it: API name, languages, hidden?, progress stat, progress min_val (if it isn't 0), `force_progress.txt` settings (if it's enabled), rarity (if `unlockrates=load`; if `unlockrates=desc` and the achievement is hidden or has no description), unlock time (if `show_timestamps` is disabled). Hold `SHIFT` to include description, API name and progress stat even if the achievement is hidden. Enable `ctrl_click` in settings and hold CTRL to check names and descriptions in differnet languages.
 
-- Clicking a stat will print its API name and default value (if it isn't 0). If it is increment-only, that will be shown and its real value will be printed too.
+- Clicking a stat will print its API name, default value (if it isn't 0) and last change time (if tracking Goldberg). If it is increment-only, that will be shown and its real value will be printed too.
 
 - Press the `~` key to print information about which game/emulator/username is being tracked and the program's version.
 
@@ -331,6 +339,33 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 - Press `Ctrl+D` to use an internal version of `ach_dumper`. This can be used to save history, too. `Ctrl+Tab+D` will do the same, but first reload the settings used by `ach_dumper` (loaded separately from normal settings). `Ctrl+Shift+D` will run regular `ach_dumper` with correct arguments.
 
 - You can manually set game names by adding them to `games/games.txt`, just like in older versions. Format: `AppID=Name`
+
+- You can force achievement progress notifications to appear for games that don't have them by creating `games/[AppID]/force_progress.txt` and listing all achievements you want to get such notifications for, one achievement API name per line (or `*` to affect all achievements). By default, you will get a notification each time the related stat changes. To get less notifications, you can set a custom step value to get notifications only every X progress units, for example: `Achievement:10`. Add an `r` if you want notifications to show values rounded down to the last notification-triggering target value: `Achievement:10r` or `Achievement:r`. If no achievement name is given before the colon, this change will apply to all achievements below. Use `:x` to cancel `:r`. Use `:-` to remove previously added achievements. Extra spaces are allowed. Examples:
+
+```
+AchievementA
+AchievementB:5
+AchievementC:r
+AchievementD:100r
+
+:20r
+  AchievementE
+  AchievementF :   x
+  AchievementG : 25x
+  AchievementH
+```
+
+```
+*:5
+UnwantedAchievement1:-
+
+:-
+UnwantedAchievement2
+ThisAchievementWillBeRemovedToo:10
+
+:
+ThisAchievementWontBeRemoved
+```
 
 ## Scripts
 

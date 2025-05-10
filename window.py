@@ -112,18 +112,34 @@ def send_steam_request(name, link):
     except Exception as ex:
         print(f'Unhandled request error: {type(ex).__name__} ({name})')
     return None
-        
+
+def draw_image_bar(x, y, w, img):
+    iw = img.get_width()
+    for i in range(w // iw):
+        screen.blit(img, (x + iw * i, y))
+    r = w % iw
+    if r > 0:
+        screen.blit(img, (x + w - r, y), (0, 0, r, img.get_height()))
+
 def draw_progressbar(x, y, w, h, p1, p2):
     if w <= 0:
         return
-    pygame.draw.rect(screen, stg['color_bar_bg'], pygame.Rect(x, y, w, h))
     if p1 > p2:
         p1 = p2
-    c2 = stg['color_bar_fill']
-    if p1 == p2:
-        c2 = stg['color_bar_completed']
-    if p2 != 0:
-        pygame.draw.rect(screen, c2, pygame.Rect(x, y, p1 * w // p2, h))
+    if stg['bar_images']:
+        draw_image_bar(x, y, w, barimagebg)
+        if p2 != 0:
+            img = barimagefill
+            if p1 == p2:
+                img = barimagecompleted
+            draw_image_bar(x, y, p1 * w // p2, img)
+    else:
+        pygame.draw.rect(screen, stg['color_bar_bg'], pygame.Rect(x, y, w, h))
+        c2 = stg['color_bar_fill']
+        if p1 == p2:
+            c2 = stg['color_bar_completed']
+        if p2 != 0:
+            pygame.draw.rect(screen, c2, pygame.Rect(x, y, p1 * w // p2, h))
 
 def draw_scrollbar(scr, maxscr, total_height):
     scrollbar_height = (stg['window_size_y'] - header_h) ** 2 // total_height
@@ -769,9 +785,11 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
                 a_count = len(cfg_achs)
         if os.path.isfile(f'{cfg_path}/stats.txt'):
             with open(f'{cfg_path}/stats.txt') as f:
-                s_count = 0
                 for l in f.readlines():
-                    s_count += l.count('=') == 3
+                    s_count += l.count('=') >= 2
+        elif os.path.isfile(f'{cfg_path}/stats.json'):
+            with open(f'{cfg_path}/stats.json') as f:
+                s_count = len(json.load(f))
         i_set = set()
         for a in cfg_achs:
             if 'icon' in a:
@@ -800,6 +818,8 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
                 i_path = f'{cfg_path}/achievement_images'
                 if cfg_format == 1:
                     i_path = f'{cfg_path}/img'
+                if not os.path.isdir(i_path):
+                    os.makedirs(i_path)
                 done = 0
                 total = i_expected_count - i_count
                 for i in i_missing:
@@ -989,6 +1009,9 @@ hidebutton = {False: load_image('sort_secrets_hideall0.png'), True: load_image('
 schemachangeicon = load_image('schema_change.png')
 hiddenlockicon = load_image('hidden_lock.png')
 hiddenunlockicon = load_image('hidden_unlock.png')
+barimagebg = load_image('bar_bg.png')
+barimagefill = load_image('bar_fill.png')
+barimagecompleted = load_image('bar_completed.png')
 
 btn_locs = {}
 btn_locs['stats'] = button_location(statsbutton)
@@ -1075,27 +1098,36 @@ if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.t
         with open(f'{save_dir}/{appid}_inc_only.json') as iofile:
             increment_only = json.load(iofile)
 
-try:
-    with open(f'games/{appid}/stats.txt') as statslist:
-        statlines = statslist.read().split('\n')
-        for line in statlines:
-            linespl = line.split('=')
-            if len(linespl) == 3:
-                locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
-                locinfo['source_extra'] = source_extra
-                if achdata_source == 'sse':
-                    c = zlib.crc32(bytes(linespl[0], 'utf-8'))
-                    stats_crc32[c] = linespl[0]
-                stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
+stat_info = []
+stat_file_exists = False
+if os.path.isfile(f'games/{appid}/stats.txt'):
+    stat_file_exists = True
+    with open(f'games/{appid}/stats.txt') as f:
+        statlines = f.read().split('\n')
+    for line in statlines:
+        stat_info.append(line.rsplit('=', 2))
+elif os.path.isfile(f'games/{appid}/stats.json'):
+    stat_file_exists = True
+    with open(f'games/{appid}/stats.json') as f:
+        statjson = json.load(f)
+    for s in statjson:
+        stat_info.append([s['name'], s['type'], s['default']])
+if stat_file_exists:
+    for linespl in stat_info:
+        if len(linespl) == 3:
+            locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
+            locinfo['source_extra'] = source_extra
+            if achdata_source == 'sse':
+                c = zlib.crc32(bytes(linespl[0], 'utf-8'))
+                stats_crc32[c] = linespl[0]
+            stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
 
-                if stats[linespl[0]].inc_only:
-                    if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
-                        increment_only[linespl[0]] = stats[linespl[0]].value
-                        io_change = True
-                    elif stats[linespl[0]].value < increment_only[linespl[0]]:
-                        stats[linespl[0]].value = increment_only[linespl[0]]
-except FileNotFoundError:
-    pass
+            if stats[linespl[0]].inc_only:
+                if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
+                    increment_only[linespl[0]] = stats[linespl[0]].value
+                    io_change = True
+                elif stats[linespl[0]].value < increment_only[linespl[0]]:
+                    stats[linespl[0]].value = increment_only[linespl[0]]
 
 def load_stats():
     global stats_last_change, io_change
@@ -1147,11 +1179,19 @@ if achdata_source == 'steam' and len(stats) > 0:
     if steam_req != None and 'stats' in steam_req['playerstats']:
         for s in steam_req['playerstats']['stats']:
             if s['name'] in stats:
-                stats[s['name']].value = s['value']
+                stats[s['name']].value = stats[s['name']].to_stat_type(s['value'])
 elif achdata_source != 'goldberg' and len(stats) > 0:
     stats_path = get_stats_path(achdata_source, appid, source_extra)
     stats_last_change = -1.0
     load_stats()
+
+if stg['rare_below_relative'] or stg['rare_guaranteed']:
+    sorted_urates = list(map(float, ach_percentages.values()))
+    sorted_urates.sort()
+    if stg['rare_below_relative'] and len(sorted_urates) > 0:
+        stg['rare_below'] *= sorted_urates[-1] * 0.01
+    if stg['rare_guaranteed'] > 0 and len(sorted_urates) > stg['rare_guaranteed']:
+        stg['rare_below'] = max(stg['rare_below'], round((sorted_urates[stg['rare_guaranteed'] - 1] + 0.1) * 10) / 10)
 
 achs = []
 for ach in achs_json:
@@ -1253,7 +1293,8 @@ for i in range(len(achs)):
         saved_tstamps[achs[i].name] = {}
         saved_tstamps[achs[i].name]['first'] = achs[i].ts_first
         saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
-        ts_change = True
+        if achs[i].ts_first != None:
+            ts_change = True
 
     if achs[i].rarity > 0:
         max_rarity = max(achs[i].rarity, max_rarity)
@@ -1358,6 +1399,63 @@ for ach in achs:
         ach.display_name_l += ach.rarity_text
     elif stg['unlockrates'] == 'desc' and ach.has_desc:
         ach.description_l += ach.rarity_text
+
+    force_progress = {}
+    if os.path.isfile(f'games/{appid}/force_progress.txt'):
+        with open(f'games/{appid}/force_progress.txt') as f:
+            force_progress_text = f.read().split('\n')
+        def_step = 0.0
+        def_round = False
+        def_removal = False
+        for x in force_progress_text:
+            x = x.rsplit(':', 1)
+            x[0] = x[0].strip()
+            s, r, rem = def_step, def_round, def_removal
+            if len(x) == 2:
+                x[1] = x[1].strip()
+                if x[1] == '-':
+                    rem = True
+                    x[1] = ''
+                elif x[0] == '':
+                    rem = False
+                last = x[1][-1:].lower()
+                if last == 'r' or last == 'x':
+                    r = last == 'r'
+                    x[1] = x[1][:-1]
+                if x[1] != '':
+                    if not (x[1].count('.') < 2 and x[1].replace('.', '').isnumeric()):
+                        continue
+                    s = float(x[1])
+                if x[0] == '':
+                    def_step, def_round, def_removal = s, r, rem
+                    continue
+            n = x[0]
+            if n == '*':
+                for a in achs:
+                    if a.progress != None and a.progress.support:
+                        st = a.progress.value['operand1']
+                        if not st in force_progress:
+                            force_progress[st] = []
+                        force_progress[st].append({'ach': a.name, 'max': a.progress.max_val, 'step': s, 'round': r})
+                continue
+            if n not in ach_idxs:
+                continue
+            a = achs[ach_idxs[n]]
+            if a.progress == None or not a.progress.support:
+                continue
+            st = a.progress.value['operand1']
+            if st in force_progress:
+                for i in range(len(force_progress[st])):
+                    if force_progress[st][i]['ach'] == n:
+                        force_progress[st].pop(i)
+                        break
+            elif not rem:
+                force_progress[st] = []
+            if rem:
+                continue
+            force_progress[st].append({'ach': n, 'max': a.progress.max_val, 'step': s, 'round': r})
+        for st in force_progress:
+            force_progress[st].sort(key=lambda x : x['max'])
 
 achs_f = filter_achs(achs, state_filter, stg)
 
@@ -1485,6 +1583,9 @@ def create_notification(t, change):
             if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
                 message = message[: -len(ach.rarity_text)]
 
+        if t == 'unlock' and stg['notif_unlock_count']:
+            title = f'[{achs_unlocked}/{len(achs)}] ' + title
+
         if len(title) > 64:
             title = title[:61]
         if len(message) > 256:
@@ -1607,13 +1708,36 @@ while running:
                     if s['name'] in stats:
                         if stats[s['name']].value != s['value']:
                             stats_changed = True
-                            stats[s['name']].value = s['value']
+                            stats[s['name']].value = stats[s['name']].to_stat_type(s['value'])
 
             if stats_changed:
                 flip_required = True
                 for ach in achs:
                     if ach.progress != None and ach.progress.support:
+                        old = ach.progress.current_value
                         ach.progress.calculate(stats)
+
+                        if ach.progress.value['operand1'] in force_progress and ach.progress.current_value > old and not ach.earned:
+                            for achf in force_progress[ach.progress.value['operand1']]:
+                                if ach.progress.current_value >= achf['max']:
+                                    if old < achf['max']:
+                                        break
+                                    continue
+                                if achf['ach'] != ach.name:
+                                    break
+                                if achf['step'] == 0 or (ach.progress.current_value // achf['step'] > old // achf['step']):
+                                    v = ach.progress.current_value
+                                    if achf['round']:
+                                        whole = isinstance(v, int)
+                                        v = v // achf['step'] * achf['step']
+                                        if whole and v % 1 == 0:
+                                            v = int(v)
+                                    time_real = datetime.now().strftime(stg['strftime']) + ' (F)'
+                                    time_action = datetime.fromtimestamp(get_stat_last_change(ach.progress.value['operand1']))
+                                    time_action = time_action.strftime(stg['strftime']) + ' (F)'
+                                    ch = {'ach_obj': ach, 'time_real': time_real, 'time_action': time_action, 'value': (v, achf['max'])}
+                                    create_notification('progress_report', ch)
+                                    break
 
                         if stg['bar_force_unlock']:
                             if ach.progress.real_value >= ach.progress.max_val and not ach.earned:
@@ -1663,6 +1787,9 @@ while running:
         if fu_change and stg['forced_keep'] == 'save':
             if not os.path.isdir(save_dir):
                 os.makedirs(save_dir)
+                if isinstance(source_extra, str) and source_extra[:5] == 'path:':
+                    with open(f'{save_dir}/path.txt', 'w') as pathfile:
+                        pathfile.write(source_extra[5:])
             with open(f'{save_dir}/{appid}_force.json', 'w') as forcefile:
                 json.dump(force_unlocks, forcefile, indent=4)
         if ts_change and stg['save_timestamps']:
@@ -1671,6 +1798,9 @@ while running:
                 saved_tstamps[a]['earliest'] = achs[ach_idxs[a]].ts_earliest
             if not os.path.isdir(save_dir):
                 os.makedirs(save_dir)
+                if isinstance(source_extra, str) and source_extra[:5] == 'path:':
+                    with open(f'{save_dir}/path.txt', 'w') as pathfile:
+                        pathfile.write(source_extra[5:])
             if ts_lost and os.path.isfile(f'{save_dir}/{appid}_time.json'):
                 n = f"save/time_backup/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}.json"
                 if not os.path.isdir('save/time_backup'):
@@ -1681,6 +1811,9 @@ while running:
         if io_change:
             if not os.path.isdir(save_dir):
                 os.makedirs(save_dir)
+                if isinstance(source_extra, str) and source_extra[:5] == 'path:':
+                    with open(f'{save_dir}/path.txt', 'w') as pathfile:
+                        pathfile.write(source_extra[5:])
             with open(f'{save_dir}/{appid}_inc_only.json', 'w') as iofile:
                 json.dump(increment_only, iofile, indent=4)
 
@@ -1722,7 +1855,7 @@ while running:
                 elif viewing == 'history':
                     scroll_history -= 1
                 flip_required = True
-            elif event.key == pygame.K_PAGEUP:
+            elif event.key == pygame.K_PAGEUP or (event.key == pygame.K_KP9 and not event.mod & pygame.KMOD_NUM):
                 if viewing in ('achs', 'history_unlocks'):
                     scroll -= achs_to_show
                 elif viewing == 'stats':
@@ -1730,13 +1863,29 @@ while running:
                 elif viewing == 'history':
                     scroll_history -= achs_to_show
                 flip_required = True
-            elif event.key == pygame.K_PAGEDOWN:
+            elif event.key == pygame.K_PAGEDOWN or (event.key == pygame.K_KP3 and not event.mod & pygame.KMOD_NUM):
                 if viewing in ('achs', 'history_unlocks'):
                     scroll += achs_to_show
                 elif viewing == 'stats':
                     scroll_stats += stats_to_show
                 elif viewing == 'history':
                     scroll_history += achs_to_show
+                flip_required = True
+            elif event.key == pygame.K_HOME or (event.key == pygame.K_KP7 and not event.mod & pygame.KMOD_NUM):
+                if viewing in ('achs', 'history_unlocks'):
+                    scroll = 0
+                elif viewing == 'stats':
+                    scroll_stats = 0
+                elif viewing == 'history':
+                    scroll_history = 0
+                flip_required = True
+            elif event.key == pygame.K_END or (event.key == pygame.K_KP1 and not event.mod & pygame.KMOD_NUM):
+                if viewing in ('achs', 'history_unlocks'):
+                    scroll = len(achs_f) - achs_to_show
+                elif viewing == 'stats':
+                    scroll_stats = len(stats) - stats_to_show
+                elif viewing == 'history':
+                    scroll_history = len(history) - achs_to_show
                 flip_required = True
             elif event.key == pygame.K_f and viewing == 'achs' and header_extra[:6] != 'search' and search_request == '':
                 keys = pygame.key.get_pressed()
@@ -1792,7 +1941,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.4.6')
+                print(' - Version: v1.5.0')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -1947,9 +2096,14 @@ while running:
                         print(f' - API name: {s.name}')
                     if s.default != 0:
                         print(f' - Default: {s.default}')
+                    if achdata_source == 'goldberg':
+                        t = get_stat_last_change(s.name)
+                        if t != None and t != 'Retry':
+                            print(f" - Last change: {datetime.fromtimestamp(t).strftime(stg['strftime'])}")
                     if s.inc_only:
                         print(' - Increment-only')
-                        print(f' - Real value: {s.real_value}')
+                        if s.value != s.real_value:
+                            print(f' - Real value: {s.real_value}')
             elif viewing == 'history':
                 if len(history) > achs_to_show and event.pos[0] >= stg['window_size_x'] - 10 and event.pos[1] >= header_h:
                     mouse_scrolling = True
@@ -2033,6 +2187,12 @@ while running:
                         print(f' - Progress stat: {s}')
                         if a.progress.min_val != 0:
                             print(f' - Progress min val: {a.progress.min_val}')
+                        if a.progress.value['operand1'] in force_progress:
+                            for f in force_progress[a.progress.value['operand1']]:
+                                if f['ach'] == a.name:
+                                    step = f['step'] if f['step'] % 1 != 0 else int(f['step'])
+                                    print(f" - Forced progress notifications enabled ({step}{'r' * f['round']})")
+                                    break
                     if (stg['unlockrates'] == 'load' or (stg['unlockrates'] == 'desc' and (not show_hidden_info or not a.has_desc))) and a.rarity != -1.0:
                         print(f' - Rarity: {a.rarity}%')
                     if not stg['show_timestamps'] and a.earned:
