@@ -1,9 +1,9 @@
-certifi==2024.12.14
-charset-normalizer==3.4.1
+certifi==2025.4.26
+charset-normalizer==3.4.2
 idna==3.10
-pillow==11.1.0
+pillow==11.2.1
 plyer==2.1.0
 pygame==2.6.1
 pyperclip==1.9.0
 requests==2.32.3
-urllib3==2.3.0
+urllib3==2.4.0

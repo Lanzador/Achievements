@@ -1,3 +1,9 @@
+## v1.5.0e1
+- Fix syntax error related to quote marks on Python 3.8.10
+- Fix "unknown value" message when calling `edit(3)`
+- New `edit()` value
+- Fix `save_hist()` crash if dir doesn't exist
+
 ## v1.4.6e1
 - Fix `sound_multi` getting triggered because of `sound_console`
 - Fix `Ctrl+Shift+R` STILL restoring old achievement states if tracking Goldberg

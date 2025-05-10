@@ -83,6 +83,8 @@ These functions can be used through `Ctrl+E`.
 
 - `n=8`, `n='al'` - `alias.txt`
 
+- `n=9`, `n='gg'` - `settings_[AppID].txt` (will be created if doesn't exist)
+
 `defset()` - set default settings.
 
 `ch_lang(l)` - change language. `l` is a string or list of strings.
