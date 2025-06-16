@@ -208,7 +208,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `notif` - show system notifications. Default: `true`
 
-`notif_desc` - show achievement descriptions in notifications (but remove notification type header). Default: `false`
+`notif_desc` - show achievement descriptions in unlock and progress notifications (but remove notification type header). Default: `false`
 
 `notif_unlock_count` - include total unlock count in achievement unlock notifications. Default: `false`
 
@@ -307,6 +307,10 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 `savetime_mark` - show `(S)` next to an achievement's timestamp if the displayed timestamp is different from the "normal" one. Default: `false`
 
 `savetime_keep_locked` - don't delete saved timestamps when an achievement gets locked. Enabling this will prevent loss of timestamp data in case of an error when loading player progress, but will also require manual deletion of saved timestamps if you decide to delete your progress. Whenever a timestamp is deleted because this is disabled, a copy of saved timestamps is created in `save/time_backup`. Default: `false`
+
+`savetime_show_locked` - show saved timestamps for locked achievements (the above setting must be enabled). Default: `false`
+
+`savetime_overwrite_locked` - overwrite old saved timestamps when an achievement is re-unlocked. Default: `false`
 
 `smooth_scale` - use `pygame.transform.smoothscale` instead of `pygame.transform.scale` to resize achievement icons when needed. Default: `true`
 

@@ -381,6 +381,11 @@ def draw_achs():
                 screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
             else:
                 pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+            if stg['show_timestamps'] and stg['savetime_show_locked'] and stg['savetime_shown'] != 'normal' and achs_f[i].get_ts(stg['savetime_shown']) != None and not hide_bar_and_time:
+                if bar_shown:
+                    show_text(screen, time_font, achs_f[i].get_time(stg), (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), time_color)
+                else:
+                    show_text(screen, time_font, achs_f[i].get_time(stg), (84, header_h + 49 + (i - scroll) * 74), time_color)
 
         if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
             draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, prg_no_min[0], prg_no_min[1])
@@ -1577,7 +1582,7 @@ def create_notification(t, change):
         if t == 'progress_report':
             message += f" ({change['value'][0]}/{change['value'][1]})"
 
-        if 'ach' in h and stg['notif_desc'] and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
+        if 'ach' in h and stg['notif_desc'] and t != 'lock' and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
             title = message
             message = ach.description_l
             if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
@@ -1742,6 +1747,9 @@ while running:
                         if stg['bar_force_unlock']:
                             if ach.progress.real_value >= ach.progress.max_val and not ach.earned:
                                 ach.earned = True
+                                if stg['savetime_overwrite_locked']:
+                                    ach.ts_first = None
+                                    ach.ts_earliest = None
                                 if ach.update_time(get_stat_last_change(ach.progress.value['operand1'])):
                                     ts_change.add(ach.name)
                                 ach.force_unlock = True
@@ -1941,7 +1949,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.5.0')
+                print(' - Version: v1.5.1')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

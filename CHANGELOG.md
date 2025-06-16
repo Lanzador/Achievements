@@ -1,3 +1,8 @@
+## v1.5.1
+- `savetime_show_locked` - an option to display saved timestamps for locked achievements (`savetime_keep_locked` must be enabled for this to work)
+- `savetime_overwrite_locked` - if enabled, old saved timestamps are overwritten when an achievement is re-unlocked
+- `notif_desc` no longer affects lock notifications
+
 ## v1.5.0
 - `rare_guaranteed` - mark least common achievements as rare if there aren't enough rare achievements for a game
 - `rare_below_relative` - treat the value of `rare_below` as a percentage of the most common achievement's unlock rate
