@@ -94,7 +94,7 @@ class Achievement:
         ts = self.get_ts(stg['savetime_shown'])
         dt = datetime.fromtimestamp(ts)
         tstring = dt.strftime(stg['strftime'])
-        if stg['savetime_mark'] and ts != self.earned_time:
+        if stg['savetime_mark'] and ts != self.earned_time and self.earned:
             tstring += ' (S)'
         if stg['forced_mark'] and self.force_unlock:
             tstring += ' (F)'
@@ -252,6 +252,9 @@ def update_achs(achs, newdata, achsfile, stg):
 
             if (not ach.force_unlock and ach.earned != newdata[ach.name]['earned']) or (ach.force_unlock and newdata[ach.name]['earned']):
                 if not ach.earned or ach.force_unlock:
+                    if stg['savetime_overwrite_locked']:
+                        ach.ts_first = None
+                        ach.ts_earliest = None
                     change['ts_change'] = ach.update_time(newdata[ach.name]['earned_time'])
                     change['type'] = 'unlock'
                     change['was_forced'] = False

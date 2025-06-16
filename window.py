@@ -44,10 +44,10 @@ def input(text='', multiline=False, show_output_lines=0):
             last_console_len += 1
             return inp
         except RuntimeError:
-            if not screen_exists:
-                screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
-                screen_exists = True
-    elif not screen_exists:
+            pass
+    if not screen_exists:
+        pygame.display.set_caption('Achievements')
+        pygame.display.set_allow_screensaver(True)
         screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
         screen_exists = True
     text_o = text
@@ -645,6 +645,11 @@ def draw_ach(i, force_bottom=False):
             screen.blit(ach_icons[achs_f[i].icon_gray], (10, header_h + (i - scroll) * 74))
         else:
             pygame.draw.rect(screen, stg['color_background'], pygame.Rect(10, header_h + (i - scroll) * 74, 64, 64))
+        if stg['show_timestamps'] and stg['savetime_show_locked'] and stg['savetime_shown'] != 'normal' and achs_f[i].get_ts(stg['savetime_shown']) != None and not hide_bar_and_time:
+            if bar_shown:
+                show_text(screen, time_font, achs_f[i].get_time(stg), (bar_length + 104 + prg_str_len, header_h + 49 + (i - scroll) * 74), time_color)
+            else:
+                show_text(screen, time_font, achs_f[i].get_time(stg), (84, header_h + 49 + (i - scroll) * 74), time_color)
 
     if achs_f[i].progress != None and not hide_bar_and_time and bar_shown:
         draw_progressbar(84, header_h + 51 + (i - scroll) * 74, bar_length, 13, prg_no_min[0], prg_no_min[1])
@@ -1304,6 +1309,7 @@ def load_everything(reload=False, keep_data=False):
                 with open('games/alias.txt', 'w') as f:
                     f.write('\n'.join(a))
 
+    global gamename
     if 'LnzAch_gamename' in os.environ:
         gamename = os.environ['LnzAch_gamename']
     else:
@@ -1747,7 +1753,7 @@ def load_everything(reload=False, keep_data=False):
             saved_tstamps[achs[i].name] = {}
             saved_tstamps[achs[i].name]['first'] = achs[i].ts_first
             saved_tstamps[achs[i].name]['earliest'] = achs[i].ts_earliest
-            if achs[i].ts_first:
+            if achs[i].ts_first != None:
                 ts_change = True
 
         if achs[i].rarity > 0:
@@ -2038,7 +2044,7 @@ def load_everything(reload=False, keep_data=False):
             if t == 'progress_report':
                 message += f" ({change['value'][0]}/{change['value'][1]})"
 
-            if 'ach' in h and stg['notif_desc'] and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
+            if 'ach' in h and stg['notif_desc'] and t != 'lock' and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
                 title = message
                 message = ach.description_l
                 if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
@@ -2228,6 +2234,9 @@ while running:
                         if stg['bar_force_unlock']:
                             if ach.progress.real_value >= ach.progress.max_val and not ach.earned:
                                 ach.earned = True
+                                if stg['savetime_overwrite_locked']:
+                                    ach.ts_first = None
+                                    ach.ts_earliest = None
                                 if ach.update_time(get_stat_last_change(ach.progress.value['operand1'])):
                                     ts_change.add(ach.name)
                                 ach.force_unlock = True
@@ -2455,7 +2464,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.5.0e1')
+                    print(' - Version: v1.5.1e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):

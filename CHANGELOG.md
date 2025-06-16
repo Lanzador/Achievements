@@ -1,3 +1,7 @@
+## v1.5.1e1
+- Fix crash instead of "Achievement list has changed" notification
+- Set window title even if no game has been loaded yet (when AppID input is requested through the main window)
+
 ## v1.5.0e1
 - Fix syntax error related to quote marks on Python 3.8.10
 - Fix "unknown value" message when calling `edit(3)`
