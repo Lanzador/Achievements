@@ -1405,62 +1405,62 @@ for ach in achs:
     elif stg['unlockrates'] == 'desc' and ach.has_desc:
         ach.description_l += ach.rarity_text
 
-    force_progress = {}
-    if os.path.isfile(f'games/{appid}/force_progress.txt'):
-        with open(f'games/{appid}/force_progress.txt') as f:
-            force_progress_text = f.read().split('\n')
-        def_step = 0.0
-        def_round = False
-        def_removal = False
-        for x in force_progress_text:
-            x = x.rsplit(':', 1)
-            x[0] = x[0].strip()
-            s, r, rem = def_step, def_round, def_removal
-            if len(x) == 2:
-                x[1] = x[1].strip()
-                if x[1] == '-':
-                    rem = True
-                    x[1] = ''
-                elif x[0] == '':
-                    rem = False
-                last = x[1][-1:].lower()
-                if last == 'r' or last == 'x':
-                    r = last == 'r'
-                    x[1] = x[1][:-1]
-                if x[1] != '':
-                    if not (x[1].count('.') < 2 and x[1].replace('.', '').isnumeric()):
-                        continue
-                    s = float(x[1])
-                if x[0] == '':
-                    def_step, def_round, def_removal = s, r, rem
+force_progress = {}
+if os.path.isfile(f'games/{appid}/force_progress.txt'):
+    with open(f'games/{appid}/force_progress.txt') as f:
+        force_progress_text = f.read().split('\n')
+    def_step = 0.0
+    def_round = False
+    def_removal = False
+    for x in force_progress_text:
+        x = x.rsplit(':', 1)
+        x[0] = x[0].strip()
+        s, r, rem = def_step, def_round, def_removal
+        if len(x) == 2:
+            x[1] = x[1].strip()
+            if x[1] == '-':
+                rem = True
+                x[1] = ''
+            elif x[0] == '':
+                rem = False
+            last = x[1][-1:].lower()
+            if last == 'r' or last == 'x':
+                r = last == 'r'
+                x[1] = x[1][:-1]
+            if x[1] != '':
+                if not (x[1].count('.') < 2 and x[1].replace('.', '').isnumeric()):
                     continue
-            n = x[0]
-            if n == '*':
-                for a in achs:
-                    if a.progress != None and a.progress.support:
-                        st = a.progress.value['operand1']
-                        if not st in force_progress:
-                            force_progress[st] = []
-                        force_progress[st].append({'ach': a.name, 'max': a.progress.max_val, 'step': s, 'round': r})
+                s = float(x[1])
+            if x[0] == '':
+                def_step, def_round, def_removal = s, r, rem
                 continue
-            if n not in ach_idxs:
-                continue
-            a = achs[ach_idxs[n]]
-            if a.progress == None or not a.progress.support:
-                continue
-            st = a.progress.value['operand1']
-            if st in force_progress:
-                for i in range(len(force_progress[st])):
-                    if force_progress[st][i]['ach'] == n:
-                        force_progress[st].pop(i)
-                        break
-            elif not rem:
-                force_progress[st] = []
-            if rem:
-                continue
-            force_progress[st].append({'ach': n, 'max': a.progress.max_val, 'step': s, 'round': r})
-        for st in force_progress:
-            force_progress[st].sort(key=lambda x : x['max'])
+        n = x[0]
+        if n == '*':
+            for a in achs:
+                if a.progress != None and a.progress.support:
+                    st = a.progress.value['operand1']
+                    if not st in force_progress:
+                        force_progress[st] = []
+                    force_progress[st].append({'ach': a.name, 'max': a.progress.max_val, 'step': s, 'round': r})
+            continue
+        if n not in ach_idxs:
+            continue
+        a = achs[ach_idxs[n]]
+        if a.progress == None or not a.progress.support:
+            continue
+        st = a.progress.value['operand1']
+        if st in force_progress:
+            for i in range(len(force_progress[st])):
+                if force_progress[st][i]['ach'] == n:
+                    force_progress[st].pop(i)
+                    break
+        elif not rem:
+            force_progress[st] = []
+        if rem:
+            continue
+        force_progress[st].append({'ach': n, 'max': a.progress.max_val, 'step': s, 'round': r})
+    for st in force_progress:
+        force_progress[st].sort(key=lambda x : x['max'])
 
 achs_f = filter_achs(achs, state_filter, stg)
 
@@ -1949,7 +1949,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.5.1')
+                print(' - Version: v1.5.2')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

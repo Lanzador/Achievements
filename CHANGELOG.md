@@ -1,3 +1,6 @@
+## v1.5.2
+- Fix non-experimental version crashing when achievement progress changes if no unlock rates are loaded
+
 ## v1.5.1
 - `savetime_show_locked` - an option to display saved timestamps for locked achievements (`savetime_keep_locked` must be enabled for this to work)
 - `savetime_overwrite_locked` - if enabled, old saved timestamps are overwritten when an achievement is re-unlocked
