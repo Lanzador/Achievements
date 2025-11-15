@@ -21,3 +21,26 @@ console_lines_erased = 0
 last_console_len = 0
 new_console_line = False
 last_code = ''
+
+cmp_init_done = False
+cmp_data = {}
+cmp_stg = {'stat_lb': True, 'unlock_lb': True,
+           'owners_count': -1, 'sort_targets': False,
+           'mark_rare': -1, 'mark_rare_remove': False,
+           'time': False}
+cmp_global_targets = {}
+cmp_save_list_shown = True
+cmp_saved_targets = {}
+cmp_unsaved_changes = False
+cmp_unsaved_changes_global = False
+cmp_reloading = False
+cmp_reload_progress = 0
+cmp_reload_progress_max = 0
+cmp_loading_global = False
+cmp_initing = False
+cmp_page = 1
+cmp_filter = ''
+cmp_mark_rare = -1
+cmp_mark_rare_remove = False
+cmp_sorted = False
+cmp_unlock_history = ''

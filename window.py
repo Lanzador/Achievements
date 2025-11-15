@@ -7,11 +7,13 @@ import math
 import zlib
 import threading
 import shutil
+import urllib.request
 from random import randint
 from datetime import datetime
 import pygame
 import requests
 import pyperclip
+import vdf
 from PIL import Image as PILimg
 from showtext import *
 from achievements import *
@@ -111,8 +113,533 @@ def draw_console_line():
     multiline_text(screen, 99999, stg['font_line_distance_regular'], stg['window_size_x'], font_general, viewing_line['text'], (0, stg['font_line_distance_regular']), stg['color_text'])
     pygame.display.flip()
 
+def draw_cmp_menu():
+    screen.fill(stg['color_background'])
+    show_text(screen, font_general, 'Comparison menu', (0, 0), stg['color_text'])
+
+    global cmp_page
+    per_page = stg['window_size_y'] // stg['font_line_distance_regular'] - 17
+    if per_page < 1: per_page = 1
+    max_page = len(cmp_data) / per_page
+    max_page = int(max_page) + (max_page % 1 > 0)
+    if cmp_page > max_page: cmp_page = 1
+
+    controls_text = [('ENTER - initialize and add targets' if not cmp_init_done else \
+                      'A - add target', not (cmp_reloading or cmp_loading_global)),
+                     ('D - delete target', len(cmp_data) > 0 and not (cmp_reloading or cmp_loading_global)),
+                     ('R - reload progress' if not cmp_reloading else \
+                     f'R - reload progress ({cmp_reload_progress}/{cmp_reload_progress_max})', cmp_is_reload_possible()),
+                     ('S - save targets', cmp_init_done),
+                     ('C - display unlock count instead of names' if cmp_stg['owners_count'] == -1 else \
+                     f"C - display unlock count instead of names (enabled / {cmp_stg['owners_count']})", cmp_init_done),
+                     ('T - show stat leaderboard summaries' if not cmp_stg['stat_lb'] else \
+                      'T - hide stat leaderboard summaries', cmp_init_done),
+                     ('U - show unlock count leaderboard summary' if not cmp_stg['unlock_lb'] else \
+                      'U - hide unlock count leaderboard summary', cmp_init_done),
+                     ('F - filter achievements' if cmp_filter == '' else \
+                     f'F - disable filter ({cmp_filter})', len(cmp_data) > 0),
+                     ('O - order (sort) achievements by rarity among targets' if not cmp_sorted else \
+                      'O - disable sorting by rarity among targets', len(cmp_data) > 0 or cmp_sorted),
+                     ('M - mark achievements as rare' if cmp_mark_rare == -1 else \
+                     f"M - marked! ({cmp_mark_rare} / {cmp_mark_rare_remove}) Remember for next sessions: {cmp_stg['mark_rare'] != -1}", (len(cmp_data) > 0 and not cmp_reloading) or cmp_mark_rare != -1),
+                     ("H - show target's unlock history", len(cmp_data) > 0),
+                    (f'P - switch page ({cmp_page}/{max_page})', max_page > 1),
+                     ('SPACE - sort targets by unlock count' if not cmp_stg['sort_targets'] else \
+                      'SPACE - unsort targets by unlock count', cmp_init_done),
+                     ('TAB - timestamps shown: [last update] / first and last unlock' if not cmp_stg['time'] else \
+                      'TAB - timestamps shown: last update / [first and last unlock]', cmp_init_done),
+                     ('ESC - back', True)]
+
+    position = 0
+    for line in controls_text:
+        position += 1
+        color = stg['color_text'] if line[1] else stg['color_text_lock']
+        show_text(screen, font_general, line[0], (0, position * stg['font_line_distance_regular']), color)
+
+    targets = cmp_data
+    if cmp_stg['sort_targets']:
+        targets = list(cmp_data.keys())
+        targets.sort(key=lambda x : cmp_data[x]['unlocks'], reverse=True)
+    position += 1
+    page_counter = -1
+    for target in targets:
+        page_counter += 1
+        if page_counter < per_page * (cmp_page - 1): continue
+        if page_counter == per_page * cmp_page: break
+        position += 1
+        text = f"[{cmp_data[target]['unlocks']}/{len(achs)}] {target}"
+        if not cmp_stg['time']:
+            if cmp_data[target]['id'] != 'FILE':
+                text += ' - ' + datetime.fromtimestamp(cmp_data[target]['time']).strftime(stg['strftime'])
+        else:
+            if cmp_data[target]['unlocks'] > 0:
+                text += ' - ' + datetime.fromtimestamp(cmp_data[target]['first_unlock']).strftime(stg['strftime'])
+                text += ' ... ' + datetime.fromtimestamp(cmp_data[target]['last_unlock']).strftime(stg['strftime'])
+        show_text(screen, font_general, text, (0, stg['font_line_distance_regular'] * position), stg['color_text'])
+
+    pygame.display.flip()
+
+def draw_cmp_save_menu():
+    screen.fill(stg['color_background'])
+    show_text(screen, font_general, 'Comparison menu (save)', (0, 0), stg['color_text'])
+
+    global cmp_page
+    per_page = stg['window_size_y'] // stg['font_line_distance_regular'] - 11
+    if per_page < 1: per_page = 1
+    max_page = len(cmp_global_targets if cmp_save_list_shown else cmp_saved_targets) / per_page
+    max_page = int(max_page) + (max_page % 1 > 0)
+    if cmp_page > max_page: cmp_page = 1
+
+    controls_text = [('A - add global target', not cmp_loading_global),
+                     ('D - delete global target', len(cmp_global_targets) > 0 and not cmp_loading_global),
+                     ('R - reset targets to global list' if not cmp_loading_global else \
+                     f'R - reset targets to global list ({cmp_reload_progress}/{cmp_reload_progress_max})',
+                      len(cmp_global_targets) > 0 and not (cmp_reloading or cmp_loading_global)),
+                     ('M - merge current targets into global list', cmp_is_merge_possible()),
+                     ('O - save current display options as global', cmp_unsaved_changes_global),
+                     ('S - save targets and options for current game', cmp_unsaved_changes and not (cmp_reloading or cmp_loading_global)),
+                     ('L - list shown: [global targets] / saved targets for this game' if cmp_save_list_shown else
+                      'L - list shown: global targets / [saved targets for this game]', True),
+                    (f'P - switch page ({cmp_page}/{max_page})', max_page > 1),
+                     ('ESC - back', True)]
+
+    position = 0
+    for line in controls_text:
+        position += 1
+        color = stg['color_text'] if line[1] else stg['color_text_lock']
+        show_text(screen, font_general, line[0], (0, position * stg['font_line_distance_regular']), color)
+
+    position += 1
+    page_counter = -1
+    if cmp_save_list_shown:
+        for target in cmp_global_targets:
+            page_counter += 1
+            if page_counter < per_page * (cmp_page - 1): continue
+            if page_counter == per_page * cmp_page: break
+            position += 1
+            text = f'{target} ({cmp_global_targets[target]})'
+            color = stg['color_text']
+            if not (target in cmp_data and cmp_data[target]['id'] == cmp_global_targets[target]):
+                color = stg['color_text_lock']
+            show_text(screen, font_general, text, (0, stg['font_line_distance_regular'] * position), color)
+    else:
+        for target in cmp_saved_targets:
+            page_counter += 1
+            if page_counter < per_page * (cmp_page - 1): continue
+            if page_counter == per_page * cmp_page: break
+            position += 1
+            text = f'{target[0]} ({target[1]})'
+            show_text(screen, font_general, text, (0, stg['font_line_distance_regular'] * position), stg['color_text'])
+
+    pygame.display.flip()
+
+def cmp_init():
+    global Achievement, AchievementUnmodded, cmp_init_done
+    class AchievementModded(Achievement):
+        def get_ts(self, savetime_shown):
+            ret = self.earned_time
+            if savetime_shown == 'first':
+                ret = self.ts_first
+            elif savetime_shown == 'earliest':
+                ret = self.ts_earliest
+            if ret == None:
+                ret = -1.0
+            return ret
+
+        def get_time(self, stg):
+            tstring = ''
+            if cmp_unlock_history == '':
+                ts = self.get_ts(stg['savetime_shown'])
+            else:
+                tstring += cmp_unlock_history + ' : '
+                ts = cmp_get_time(cmp_unlock_history, self)
+            if ts != -1.0:
+                dt = datetime.fromtimestamp(ts)
+                tstring += dt.strftime(stg['strftime'])
+            if cmp_unlock_history == '':
+                if stg['savetime_mark'] and ts != self.earned_time and self.earned:
+                    tstring += ' (S)'
+                if stg['forced_mark'] and self.force_unlock:
+                    tstring += ' (F)'
+            owners_count = sum([owned_by(x, self) for x in cmp_data])
+            if cmp_stg['owners_count'] == -1 or owners_count < cmp_stg['owners_count']:
+                for target in cmp_data:
+                    if self.name in cmp_data[target]['achs'] and cmp_data[target]['achs'][self.name]['earned']:
+                        tstring += ' [' + target + ']'
+            else:
+                tstring += f' [{owners_count}]'
+            return tstring.strip()
+    AchievementUnmodded = Achievement
+    Achievement = AchievementModded
+    cmp_init_done = True
+    load_everything(1, 1)
+
+def owned_by(x, a):
+    a = find_a(a)
+    try:
+        return cmp_data[x]['achs'][a.name]['earned']
+    except KeyError:
+        return False
+
+def cmp_get_time(x, a):
+    a = find_a(a)
+    try:
+        return cmp_data[x]['achs'][a.name]['earned_time']
+    except KeyError:
+        return 0.0
+
+def cmp_get_data(target_name, target_id):
+    achs_out = None
+    stats_out = None
+    achs_failed = False
+    if len(achs) > 0:
+        achs_rq = send_steam_request('GetPlayerAchievements', f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid={appid}&key={stg['api_key']}&steamid={target_id}")
+        if achs_rq != None:
+            achs_out = convert_achs_format(achs_rq['playerstats']['achievements'], 'steam')
+        else:
+            achs_failed = True
+            print(f'Failed to get achievements for {target_name}')
+    if len(stats) > 0 and not achs_failed:
+        stats_rq = send_steam_request('GetUserStatsForGame', f"https://api.steampowered.com/ISteamUserStats/GetUserStatsForGame/v0002/?appid={appid}&key={stg['api_key']}&steamid={target_id}")
+        if stats_rq != None and 'stats' in stats_rq['playerstats']:
+            stats_rq = stats_rq['playerstats']['stats']
+            stats_out = {}
+            for s in stats_rq:
+                stats_out[s['name']] = s['value']
+        else:
+            print(f'Failed to get stats for {target_name}')
+    return achs_out, stats_out
+
+def cmp_count_target_unlocks(target):
+    unlocks = 0
+    for a in achs:
+        if owned_by(target, a):
+            unlocks += 1
+    cmp_data[target]['unlocks'] = unlocks
+    if unlocks == 0:
+        cmp_data[target]['first_unlock'] = 0.0
+        cmp_data[target]['last_unlock'] = 0.0
+    else:
+        times = []
+        for a in achs:
+            if owned_by(target, a):
+                times.append(cmp_get_time(target, a))
+        cmp_data[target]['first_unlock'] = min(times)
+        cmp_data[target]['last_unlock'] = max(times)
+
+def cmp_add_internal(target_name, target_id, data=None):
+    global cmp_unsaved_changes
+    if data == None:
+        data = cmp_get_data(target_name, target_id)
+    data_achs, data_stats = data
+    if data_achs != None or data_stats != None:
+        cmp_data[target_name] = {}
+        cmp_data[target_name]['id'] = target_id
+        cmp_data[target_name]['time'] = time.time()
+        cmp_data[target_name]['achs'] = data_achs if data_achs != None else {}
+        cmp_data[target_name]['stats'] = data_stats if data_stats != None else {}
+        cmp_count_target_unlocks(target_name)
+        cmp_data[target_name]['saved'] = False
+        cmp_unsaved_changes = True
+
+def cmp_add(batch=False):
+    global flip_required
+    flip_required = True
+    target_name = input('Target name: ')
+    if target_name == '': return
+    if target_name in cmp_data:
+        print(f'Target {target_name} already exists')
+        return
+    target_id = input('Target Steam ID or path to file: ')
+    target_id = check_alias(target_id)
+    if target_id.isnumeric():
+        if len(stg['api_key']) != 0:
+            cmp_add_internal(target_name, target_id)
+        else:
+            print("An API key is required to load a target's progress")
+    elif os.path.isfile(target_id):
+        if os.path.isfile(target_id):
+            try:
+                with open(target_id) as f:
+                    data = json.load(f)
+                data_achs = data['achs'] if 'achs' in data else None
+                data_stats = data['stats'] if 'stats' in data else None
+                cmp_add_internal(target_name, 'FILE', (data_achs, data_stats))
+            except json.decoder.JSONDecodeError:
+                print('Got JSONDecodeError when loading', target_id)
+    elif target_id == '' and target_name in cmp_global_targets:
+        cmp_add_internal(target_name, cmp_global_targets[target_name])
+    elif target_id == '' and target_name != check_alias(target_name) and check_alias(target_name).isnumeric():
+        cmp_add_internal(target_name, check_alias(target_name))
+    else:
+        print('Invalid Steam ID or file not found:', target_id)
+
+    if batch: cmp_add(True)
+
+def cmp_add_global(batch=False):
+    global flip_required
+    flip_required = True
+    target_name = input('Global target name: ')
+    if target_name == '': return
+    if target_name in cmp_global_targets:
+        print(f'Target {target_name} already exists')
+        return
+    target_id = input('Global target Steam ID: ')
+    target_id = check_alias(target_id)
+    unsaved_changes = False
+    if target_id.isnumeric():
+        cmp_global_targets[target_name] = target_id
+        unsaved_changes = True
+    elif target_id == '' and target_name != check_alias(target_name) and check_alias(target_name).isnumeric():
+        cmp_global_targets[target_name] = check_alias(target_name)
+        unsaved_changes = True
+    else:
+        print('Invalid Steam ID:', target_id)
+
+    if unsaved_changes:
+        if not os.path.isdir('save/compare'):
+            os.makedirs('save/compare')
+        with open(f'save/compare/global.json', 'w') as f:
+            json.dump(cmp_global_targets, f, indent=4)
+
+    if batch: cmp_add_global(True)
+
+def cmp_delete():
+    global flip_required, cmp_unsaved_changes
+    flip_required = True
+    n = input('Target to delete: ')
+    if n in cmp_data:
+        cmp_data.pop(n)
+        cmp_unsaved_changes = True
+    elif n != '':
+        print('Target does not exist:', n)
+
+def cmp_delete_global():
+    global flip_required
+    flip_required = True
+    n = input('Global target to delete: ')
+    if n in cmp_global_targets:
+        cmp_global_targets.pop(n)
+        if not os.path.isdir('save/compare'):
+            os.makedirs('save/compare')
+        with open(f'save/compare/global.json', 'w') as f:
+            json.dump(cmp_global_targets, f, indent=4)
+    elif n != '':
+        print('Global target does not exist:', n)
+
+def cmp_save_game_targets():
+    global cmp_saved_targets, cmp_unsaved_changes
+    for target in cmp_data:
+        cmp_data[target]['saved'] = True
+    if not os.path.isdir('save/compare'):
+        os.makedirs('save/compare')
+    with open(f'save/compare/{appid}.json', 'w') as f:
+        json.dump({'cmp_data': cmp_data, 'cmp_stg': cmp_stg}, f, indent=4)
+    cmp_saved_targets = [(target, cmp_data[target]['id']) for target in cmp_data]
+    cmp_unsaved_changes = False
+
+def cmp_is_merge_possible():
+    if cmp_loading_global: return False
+    for target in cmp_data:
+        if cmp_data[target]['id'] != 'FILE' and not target in cmp_global_targets:
+            return True
+    return False
+
+def cmp_is_reload_possible():
+    if cmp_reloading: return False
+    if cmp_loading_global: return False
+    for target in cmp_data:
+        if cmp_data[target]['id'] != 'FILE':
+            return True
+    return False
+
+def cmp_merge_into_global():
+    global flip_required
+    flip_required = True
+    unsaved_changes = False
+    for target in cmp_data:
+        if cmp_data[target]['id'] != 'FILE' and not target in cmp_global_targets:
+            cmp_global_targets[target] = cmp_data[target]['id']
+            unsaved_changes = True
+    if unsaved_changes:
+        if not os.path.isdir('save/compare'):
+            os.makedirs('save/compare')
+        with open(f'save/compare/global.json', 'w') as f:
+            json.dump(cmp_global_targets, f, indent=4)
+
+def cmp_reload(quick=False):
+    global cmp_reloading, cmp_reload_progress, cmp_reload_progress_max, flip_required
+    cmp_reload_progress = 0
+    if not quick:
+        cmp_reload_progress_max = sum([cmp_data[x]['id'] != 'FILE' for x in cmp_data])
+    else:
+        cmp_reload_progress_max = sum([cmp_data[x]['id'] != 'FILE' and time.time() >= cmp_data[x]['time'] + stg['exp_cmp_expire'] for x in cmp_data])
+    cmp_reloading = True
+    flip_required = True
+
+    unsaved_changes = False
+    for target in cmp_data:
+        if cmp_data[target]['id'] == 'FILE': continue
+        if quick and time.time() < cmp_data[target]['time'] + stg['exp_cmp_expire']: continue
+        data_achs, data_stats = cmp_get_data(target, cmp_data[target]['id'])
+        if data_achs != None:
+            cmp_data[target]['achs'] = data_achs
+            cmp_count_target_unlocks(target)
+        if data_stats != None:
+            cmp_data[target]['stats'] = data_stats
+        if data_achs != None or data_stats != None:
+            cmp_data[target]['time'] = time.time()
+            filter_needed = True
+            if cmp_data[target]['saved']:
+                unsaved_changes = True
+        cmp_reload_progress += 1
+        flip_required = True
+
+    if unsaved_changes:
+        cmp_save = {'cmp_data': cmp_data.copy(), 'cmp_stg': cmp_stg}
+        for target in cmp_data:
+            if not cmp_data[target]['saved']:
+                cmp_save['cmp_data'].pop(target)
+        if not os.path.isdir('save/compare'):
+            os.makedirs('save/compare')
+        with open(f'save/compare/{appid}.json', 'w') as f:
+            json.dump(cmp_save, f, indent=4)
+
+    if quick and cmp_stg['mark_rare'] != -1:
+        cmp_mark_rare_achs(cmp_stg['mark_rare'], cmp_stg['mark_rare_remove'])
+
+    cmp_reloading = False
+    flip_required = True
+
+def cmp_load_global(autosave=False):
+    global cmp_loading_global, cmp_reload_progress, cmp_reload_progress_max, flip_required
+    cmp_reload_progress = 0
+    cmp_reload_progress_max = len(cmp_global_targets)
+    cmp_loading_global = True
+    flip_required = True
+
+    cmp_data.clear()
+    for target in cmp_global_targets:
+        cmp_add_internal(target, cmp_global_targets[target])
+        cmp_reload_progress += 1
+        filter_needed = True
+        flip_required = True
+
+    if autosave:
+        cmp_save_game_targets()
+
+    cmp_loading_global = False
+    flip_required = True
+
+def cmp_filter_achs(conditions):
+    conditions_or = conditions.split('+')
+    achs_out = []
+    unknown = False
+    for a in achs:
+        ok_final = False
+        for co in conditions_or:
+            conditions_and = co.split('&')
+            ok_and = True
+            for ca in conditions_and:
+                subconds = ca.split('|')
+                ok = False
+                for c in subconds:
+                    if c.startswith('<') and c[1:].isnumeric():
+                        num = int(c[1:])
+                        if sum([owned_by(x, a) for x in cmp_data]) <= num:
+                            ok = True; break
+                    elif c.startswith('>') and c[1:].isnumeric():
+                        num = int(c[1:])
+                        if sum([owned_by(x, a) for x in cmp_data]) >= num:
+                            ok = True; break
+                    else:
+                        negative = c.startswith('!')
+                        name = c if not negative else c[1:]
+                        if not name in cmp_data:
+                            print('Unknown target in conditon:', name)
+                            unknown = True
+                        if owned_by(name, a) != negative:
+                            ok = True; break
+                if not ok:
+                    ok_and = False; break
+            if ok_and:
+                ok_final = True; break
+                
+        if unknown:
+            achs_out.clear()
+            break
+        if ok_final:
+            achs_out.append(a)
+
+    return achs_out
+
+def cmp_mark_rare_achs(count, remove_old):
+    global cmp_mark_rare, cmp_mark_rare_remove
+    for a in achs:
+        if sum([owned_by(x, a) for x in cmp_data]) <= count:
+            a.rare = True
+        elif remove_old:
+            a.rare = False
+    cmp_mark_rare = count
+    cmp_mark_rare_remove = remove_old
+
+def cmp_leaderboard(func):
+    lb = list(cmp_data.keys())
+    lb.sort(key=func, reverse=True)
+    lb_vals = [(x, func(x)) for x in lb]
+    for i in range(len(lb) - 1, -1, -1):
+        if lb_vals[i][1] != -1: break
+        lb_vals.pop(-1)
+    return lb_vals
+
+def cmp_leaderboard_short(func, val):
+    lb = cmp_leaderboard(func)
+    pos = 1
+    next_name = None
+    next_val = None
+    for x in lb:
+        if x[1] <= val: break
+        pos += 1
+        next_name = x[0]
+        next_val = x[1]
+    text = f' [#{pos}/{len(lb) + 1}'
+    if pos != 1:
+        text += f' -> {next_name} {next_val}'
+    text += ']'
+    return text
+
+def cmp_unlock_lb():
+    return cmp_leaderboard(lambda x : cmp_data[x]['unlocks'])
+
+def cmp_unlock_lb_short():
+    return cmp_leaderboard_short(lambda x : cmp_data[x]['unlocks'], achs_unlocked)
+
+def cmp_unlock_time_lb(name):
+    return cmp_leaderboard(lambda x : cmp_get_time(x, name) if owned_by(x, name) else -1)
+
+def cmp_stat_lb(name):
+    return cmp_leaderboard(lambda x : cmp_data[x]['stats'].get(name, stats[name].default if name in stats else -1))
+
+def cmp_stat_lb_short(name):
+    return cmp_leaderboard_short(lambda x : cmp_data[x]['stats'].get(name, stats[name].default if name in stats else -1), stats[name].value)
+
+def cmp_dump(fn=None):
+    if fn == None:
+        fn = input('File name: ')
+        if fn == '':
+            if not os.path.isdir('ach_dumper'):
+                os.makedirs('ach_dumper') 
+            f = f"ach_dumper/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}_cmp.json"   
+    data = {'achs': {}, 'stats': {}}
+    for ach in achs:
+        data['achs'][ach.name] = {'earned': ach.earned, 'earned_time': max(0.0, ach.get_ts(stg['savetime_shown']))}
+    for stat in stats.values():
+        data['stats'][stat.name] = stat.value
+    with open(fn, 'w') as f:
+        json.dump(data, f, indent=4)
+
 def get_grid_height():
-     return math.ceil(len(achs_f) / achs_to_show_horiz) + stg['exp_grid_empty_line']
+    return math.ceil(len(achs_f) / achs_to_show_horiz) + stg['exp_grid_empty_line']
 
 def find_a(ach):
     if isinstance(ach, int):
@@ -170,7 +697,7 @@ def unlock_all():
 def edit(n):
     values = {1: ['a'], 2: ['s'], 3: ['as', 'b'], 4: ['f'],
               5: ['sv', 'v'], 6: ['c'], 7: ['g'], 8: ['al'],
-              9: ['gg']}
+              9: ['gg'], 10: ['st']}
     for v in values:
         if n in values[v]:
             n = v
@@ -201,6 +728,8 @@ def edit(n):
         if not os.path.isfile(p):
             with open(p, 'w') as f:
                 pass
+    elif n == 10:
+        p = os.path.join(get_steam_path(), 'appcache/stats')
     if p != None:
         if not(os.path.exists(p)):
             print(p, 'does not exist')
@@ -216,6 +745,26 @@ def defset():
     load_everything(True, True)
     upd_hist_objs()
 
+def invset(x, vals=None):
+    if not x in known_settings:
+        print('Unknown setting:', x)
+        return
+    if vals == None:
+        if known_settings[x]['type'] != 'bool':
+            print(x, 'is not bool')
+            return
+        stg[x] = not stg[x]
+    else:
+        if len(vals) == 1:
+            vals = (vals[0], known_settings[x]['default'])
+        if len(vals) != 2:
+            print('Wrong len(vals)')
+            return
+        if stg[x] == vals[0]:
+            stg[x] = vals[1]
+        else:
+            stg[x] = vals[0]
+
 def ch_lang(l):
     if not isinstance(l, list):
         l = [l]
@@ -223,7 +772,9 @@ def ch_lang(l):
     load_everything(True, True)
     upd_hist_objs()
 
-def list_langs(a):
+def list_langs(a=None):
+    if a == None:
+        a = get_hover()
     a = find_a(a)
     if isinstance(a.display_name, dict):
         print()
@@ -240,16 +791,36 @@ def ch_size(x, y):
     load_everything(True, True)
 
 def ch_game(x):
+    if cmp_init_done:
+        if cmp_reloading or cmp_loading_global:
+            print('Wait for background process to finish before using ch_game()')
+            return
+        cmp_data.clear()
+        cmp_saved_targets.clear()
+        global cmp_unlock_history
+        cmp_unlock_history = ''
+
     global appid, achdata_source, source_extra
     appid, achdata_source, source_extra = load_game(x)
     load_everything()
 
+    if len(cmp_data) > 0 or (stg['exp_cmp_autoload_global'] and len(cmp_global_targets) > 0 and (len(achs) > 0 or len(stats) > 0)) and not cmp_init_done:
+        cmp_init()
+
 def ch_emu(x):
+    if cmp_init_done:
+        global cmp_unlock_history
+        cmp_unlock_history = ''
+
     global appid, achdata_source, source_extra
     _, achdata_source, source_extra = load_game(appid + ' ' + x)
     load_everything()
 
 def ch_user(x):
+    if cmp_init_done:
+        global cmp_unlock_history
+        cmp_unlock_history = ''
+
     global appid, achdata_source, source_extra
     source_extra = load_game(appid + ' ' + achdata_source + ' ' + x)[2]
     load_everything()
@@ -322,6 +893,21 @@ def test_notif(t, ach=None, prog=None):
     if ch['type'] == 'progress_report':
         ch['value'] = prog
     create_notification(t, ch)
+
+def generate_inc_only():
+    if schema_as_config:
+        io = data_from_schema['stats_io']
+    elif os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin'):
+        with open(f'games/{appid}/UserGameStatsSchema_{appid}.bin', 'rb') as f:
+            io = process_schema(appid, vdf.binary_loads(f.read()))['stats_io']
+    elif os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')):
+        with open(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'), 'rb') as f:
+            io = process_schema(appid, vdf.binary_loads(f.read()))['stats_io']
+    else:
+        print('Failed to find schema')
+        return
+    with open(f'games/{appid}/increment_only.txt', 'w') as f:
+        f.write('\n'.join(io))
 ### EXPERIMENTAL
 
 if platform.uname().system == 'Linux':
@@ -479,6 +1065,25 @@ def draw_game_progress(max_name_length):
         game_progress_str += f' ({achs_unlocked * 100 // len(achs)}%)'
     else:
         game_progress_str += ' (0%)'
+
+    if len(cmp_data) > 0 and cmp_stg['unlock_lb']:
+        game_progress_str += cmp_unlock_lb_short()
+        ucounts = [cmp_data[x]['unlocks'] for x in cmp_data]
+        best = max(ucounts)
+        if best > achs_unlocked:
+            closest = 0
+            ucounts.sort()
+            for i in ucounts:
+                closest = i
+                if i > achs_unlocked: break
+            draw_start = (achs_unlocked * stg['gamebar_length'] // len(achs))
+            closest_px = (closest * stg['gamebar_length'] // len(achs)) - draw_start
+            best_px = (best * stg['gamebar_length'] // len(achs)) - draw_start
+            if stg['exp_cmp_color_bar_best'] != None:
+                pygame.draw.rect(screen, stg['exp_cmp_color_bar_best'], pygame.Rect(10 + draw_start, y, best_px, 13))
+            if stg['exp_cmp_color_bar_next'] != None:
+                pygame.draw.rect(screen, stg['exp_cmp_color_bar_next'], pygame.Rect(10 + draw_start, y, closest_px, 13))
+
     show_text(screen, font_general, game_progress_str, (stg['gamebar_length'] + 20, y - 2), stg['color_text'])
 
 def draw_ach(i, force_bottom=False):
@@ -809,6 +1414,8 @@ def draw_stats():
     for stat in stats.values():
         if already_shown >= 0:
             value = str(stat.value)
+            if len(cmp_data) > 0 and cmp_stg['stat_lb']:
+                value += cmp_stat_lb_short(stat.name)
             if stat.inc_only and stat.value != stat.real_value:
                 value += ' (*)'
             if stat.type in ('avgrate', 'avgrate_st'):
@@ -950,9 +1557,16 @@ def draw_history():
                 color1 = color2
 
             progress_str = f"{history[i]['value'][0]}/{history[i]['value'][1]}"
-            prg_str_len = time_font.size(progress_str)[0]
             title_str = long_text(screen, stg['window_size_x'] - 94 - font_regular.size(f' ({progress_str})')[0], font_regular, 'Progress: ' + history[i]['ach'].display_name_np, None, (255, 255, 255), True)
             show_text(screen, font_regular, f'{title_str} ({progress_str})', (84, header_h + (i - scroll_history) * 74), color1)
+
+            if stg['bar_percentage'] != 'no':
+                bar_percentage = round_down(history[i]['value'][0] / history[i]['value'][1] * 100, 1) + '%'
+                if stg['bar_percentage'] == 'show':
+                    progress_str += f' ({bar_percentage})'
+                else:
+                    progress_str = bar_percentage
+            prg_str_len = time_font.size(progress_str)[0]
 
             if not can_show_desc:
                 multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll_history) * 74), color2)
@@ -987,7 +1601,9 @@ def draw_history():
     pygame.display.flip()
 
 def ach_dumper():
-    if viewing == 'console_line':
+    if viewing in ('console_line', 'compare', 'compare_save'):
+        return
+    if viewing == 'history_unlocks' and cmp_unlock_history != '':
         return
 
     dump_time = datetime.now()
@@ -1041,8 +1657,10 @@ def ach_dumper():
             elif len(stg_ad['hidden_desc']) > 0:
                 text += '\n' + stg_ad['hidden_desc']
 
-            if a.earned:
+            if a.earned and stg_ad['show_timestamps']:
                 text += '\n' + f"[Unlocked - {datetime.fromtimestamp(a.get_ts(stg_ad['savetime_shown'])).strftime(stg_ad['strftime'])}]"
+            elif a.earned:
+                text += '\n[Unlocked]'
             else:
                 text += '\n[Locked]'
 
@@ -1072,7 +1690,8 @@ def ach_dumper():
                     text += '\n' + h['ach'].description_l
                 elif len(stg_ad['hidden_desc']) > 0:
                     text += '\n' + stg_ad['hidden_desc']
-            text += '\n[' + h['time_' + stg['history_time']] + ']'
+            if stg_ad['show_timestamps']:
+                text += '\n[' + h['time_' + stg['history_time']] + ']'
     elif viewing == 'stats' and len(stats) > 0:
         text += '\n'
         for s in stats:
@@ -1111,10 +1730,20 @@ def load_everything(reload=False, keep_data=False):
 
     global stg
     if not keep_data:
+        if reload:
+            stg_to_keep = {}
+            for s in ['sort_by_rarity', 'unlocks_on_top', 'unlocks_timesort', 'secrets', 'secrets_listhide']:
+                stg_to_keep[s] = stg[s]
         stg = load_settings(appid, achdata_source)
         if reload:
             stg.update(stg_to_keep)
         stg_ad = load_settings(appid, achdata_source, True)
+
+
+    global screen_exists
+    if screen_exists:
+        screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+        # Update window size after game-specific settings are loaded or after Ctrl+Shift+R
 
     # min_size_x = 274
     min_size_x = 170
@@ -1187,15 +1816,16 @@ def load_everything(reload=False, keep_data=False):
         if os.path.isdir('login_temp'):
             shutil.rmtree('login_temp')
 
-    if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
+    new_config = False
+    download_icons = False
+    schema_in_appcache = os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'))
+    if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}') and (stg['generator_priority'] or not schema_in_appcache):
         interrupted_gen = False
         if os.path.isdir(f'{appid}_output'):
             interrupted_gen = True
-            cfg_format = 0
             cfg_path = f'{appid}_output/steam_settings'
         elif os.path.isdir(f'output/{appid}'):
             interrupted_gen = True
-            cfg_format = 1
             cfg_path = f'output/{appid}/steam_settings'
         if interrupted_gen:
             print(f'Found possibly incomplete auto-generated config: {cfg_path}')
@@ -1221,12 +1851,9 @@ def load_everything(reload=False, keep_data=False):
                     i_set.add(a['icon_gray'])
             i_expected_count = len(i_set)
             i_count = 0
-            i_missing = set()
             for i in i_set:
                 if os.path.isfile(f'{cfg_path}/achievement_images/{i}') or os.path.isfile(f'{cfg_path}/{i}'):
                     i_count += 1
-                else:
-                    i_missing.add(i)
             print(f' - Achievements: {a_count}')
             print(f' - Stats: {s_count}')
             print(f' - Achievement icons: {i_count}/{i_expected_count}')
@@ -1235,41 +1862,7 @@ def load_everything(reload=False, keep_data=False):
                 print(f'({i_expected_count - i_count} icons will be downloaded)')
             if input(show_output_lines = 5 + (i_count != i_expected_count)) == '':
                 if i_count != i_expected_count:
-                    import urllib.request
-                    base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
-                                  'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
-                    i_path = f'{cfg_path}/achievement_images'
-                    if cfg_format == 1:
-                        i_path = f'{cfg_path}/img'
-                    if not os.path.isdir(i_path):
-                        os.makedirs(i_path)
-                    done = 0
-                    total = i_expected_count - i_count
-                    global screen_exists
-                    for i in i_missing:
-                        if screen_exists:
-                            for event in pygame.event.get():
-                                if event.type == pygame.QUIT:
-                                    sys.exit()
-                            draw_progressbar(0, stg['window_size_y'] - 10, stg['window_size_x'], 10, done, total)
-                            pygame.display.update(pygame.Rect(0, stg['window_size_y'] - 10, stg['window_size_x'], 10))
-                        if cfg_format == 1:
-                            i = i[4:]
-                        done += 1
-                        print(f'[{done}/{total}] {i}')
-                        success = False
-                        for u in range(len(base_urls)):
-                            url = base_urls[u] + appid + '/' + i
-                            try:
-                                urllib.request.urlretrieve(url, i_path + '/' + i)
-                                success = True
-                                break
-                            except Exception as ex:
-                                pass
-                        if not success:
-                            print('Failed to download icon. Restart to retry')
-                            input()
-                            sys.exit()
+                    download_icons = True
                 shutil.move(cfg_path, f'games/{appid}')
             generator_cleanup()
 
@@ -1293,21 +1886,31 @@ def load_everything(reload=False, keep_data=False):
                     sys.exit()
             generator_cleanup()
 
-        if not os.path.isdir(f'games/{appid}'):
+        if os.path.isdir(f'games/{appid}'):
+            new_config = True
+        else:
             print('Failed to generate config!')
-        elif os.path.isfile('games/alias.txt'):
-            try:
-                alias = input('Alias: ')
-            except RuntimeError:
-                alias = ''
-            if alias != '':
-                emu_info = appid + ' ' + input(f'Alias target: {appid} ')
-                emu_info = emu_info.rstrip()
-                with open('games/alias.txt') as f:
-                    a = f.read().split('\n')
-                a.append(emu_info + '=' + alias)
-                with open('games/alias.txt', 'w') as f:
-                    f.write('\n'.join(a))
+
+    if not os.path.isdir(f'games/{appid}') and schema_in_appcache:
+        os.makedirs(f'games/{appid}')
+        shutil.copy(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'),  f'games/{appid}')
+        print('Schema copied from Steam folder. Icons will be downloaded')
+        new_config = True
+        download_icons = True
+
+    if new_config and os.path.isfile('games/alias.txt'):
+        try:
+            alias = input('Alias: ')
+        except RuntimeError:
+            alias = ''
+        if alias != '':
+            emu_info = appid + ' ' + input(f'Alias target: {appid} ')
+            emu_info = emu_info.rstrip()
+            with open('games/alias.txt') as f:
+                a = f.read().split('\n')
+            a.append(emu_info + '=' + alias)
+            with open('games/alias.txt', 'w') as f:
+                f.write('\n'.join(a))
 
     global gamename
     if 'LnzAch_gamename' in os.environ:
@@ -1353,6 +1956,7 @@ def load_everything(reload=False, keep_data=False):
                         steam_req = None
                 if steam_req == None and percentdata != None:
                     ach_percentages = percentdata['achievements']
+                    print('Last unlock rates update:', datetime.fromtimestamp(percentdata['time']).strftime(stg['strftime']))
                 elif steam_req == None:
                     stg['unlockrates'] = 'none'
             else:
@@ -1381,10 +1985,6 @@ def load_everything(reload=False, keep_data=False):
 
     # pygame.init()
 
-    pygame.display.set_caption(f'Achievements | {gamename}')
-    pygame.display.set_allow_screensaver(True)
-    screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
-    screen_exists = True
     achs_to_show = (stg['window_size_y'] - header_h + 10) // 74
     if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
         achs_to_show -= 1
@@ -1500,18 +2100,36 @@ def load_everything(reload=False, keep_data=False):
         sounds[4] = load_sound(stg['sound_multi'])
         sounds[5] = load_sound(stg['sound_complete'])
 
+    schema_as_config = os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+    if schema_as_config:
+        with open(f'games/{appid}/UserGameStatsSchema_{appid}.bin', 'rb') as f:
+            data_from_schema = process_schema(appid, vdf.binary_loads(f.read()))
+
     global achs_json
     if not keep_data:
-        try:
-            with open(f'games/{appid}/achievements.json') as achsfile:
-                achs_json = json.load(achsfile)
-        except FileNotFoundError:
-            achs_json = {}
+        achs_json = []
+        if not schema_as_config:
+            if os.path.isfile(f'games/{appid}/achievements.json'):
+                with open(f'games/{appid}/achievements.json') as achsfile:
+                    achs_json = json.load(achsfile)
+        else:
+            achs_json = data_from_schema['achs']
 
-    achs_crc32 = {}
+    global source_ach_ids, source_stat_ids
+    source_ach_ids = {}
+    source_stat_ids = {}
+    stl_ids_loaded = False
     if achdata_source == 'sse':
         for a in achs_json:
-            achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+            source_ach_ids[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+    elif achdata_source == 'steam_local':
+        if schema_as_config or os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')):
+            if not schema_as_config:
+                with open(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'), 'rb') as f:
+                    data_from_schema = process_schema(appid, vdf.binary_loads(f.read()), ids_only=True)
+            source_ach_ids = data_from_schema['ach_ids']
+            source_stat_ids = data_from_schema['stat_ids']
+            stl_ids_loaded = True
 
     global achieved_json
     if not keep_data:
@@ -1519,17 +2137,17 @@ def load_everything(reload=False, keep_data=False):
         if achdata_source != 'steam':
             try:
                 m = 'rt'
-                if achdata_source == 'sse':
+                if achdata_source in ('sse', 'steam_local'):
                     m = 'rb'
                 with open(get_player_achs_path(achdata_source, appid, source_extra), m) as player_achsfile:
                     if achdata_source == 'goldberg':
                         achieved_json = json.load(player_achsfile)
-                    elif achdata_source in ('codex', 'ali213'):
+                    elif achdata_source == 'steam_local':
+                        achieved_json = vdf.binary_loads(player_achsfile.read())
+                        achieved_json = convert_achs_format(achieved_json, achdata_source, source_ach_ids)
+                    else:
                         achieved_json = player_achsfile.read()
-                        achieved_json = convert_achs_format(achieved_json, achdata_source)
-                    elif achdata_source == 'sse':
-                        achieved_json = player_achsfile.read()
-                        achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
+                        achieved_json = convert_achs_format(achieved_json, achdata_source, source_ach_ids)
             except FileNotFoundError:
                 pass
             except Exception as ex:
@@ -1540,13 +2158,13 @@ def load_everything(reload=False, keep_data=False):
                 achieved_json = steam_req['playerstats']['achievements']
                 achieved_json = convert_achs_format(achieved_json, achdata_source)
 
+    global stats
     stats = {}
-    stats_crc32 = {}
     increment_only_names = []
     increment_only = {}
     io_change = False
 
-    if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.txt'):
+    if not achdata_source in ('steam', 'steam_local') and os.path.isfile(f'games/{appid}/increment_only.txt'):
         with open(f'games/{appid}/increment_only.txt') as iofile:
             increment_only_names = iofile.read().split('\n')
         if os.path.isfile(f'{save_dir}/{appid}_inc_only.json'):
@@ -1554,40 +2172,43 @@ def load_everything(reload=False, keep_data=False):
                 increment_only = json.load(iofile)
 
     stat_info = []
-    stat_file_exists = False
-    if os.path.isfile(f'games/{appid}/stats.txt'):
-        stat_file_exists = True
+    if schema_as_config:
+        stat_info = data_from_schema['stats']
+        if stg['stat_display_names'] and len(stat_info) > 0 and len(stat_dnames) == 0:
+            stat_dnames = data_from_schema['stat_dnames']
+            with open(f'games/{appid}/statdisplay.json', 'w') as f:
+                json.dump(stat_dnames, f, indent=4)
+    elif os.path.isfile(f'games/{appid}/stats.txt'):
         with open(f'games/{appid}/stats.txt') as f:
             statlines = f.read().split('\n')
         for line in statlines:
             stat_info.append(line.rsplit('=', 2))
     elif os.path.isfile(f'games/{appid}/stats.json'):
-        stat_file_exists = True
         with open(f'games/{appid}/stats.json') as f:
             statjson = json.load(f)
         for s in statjson:
             stat_info.append([s['name'], s['type'], s['default']])
-    if stat_file_exists:
-        for linespl in stat_info:
-            if len(linespl) == 3:
-                locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
-                locinfo['source_extra'] = source_extra
-                if achdata_source == 'sse':
-                    c = zlib.crc32(bytes(linespl[0], 'utf-8'))
-                    stats_crc32[c] = linespl[0]
-                stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
 
-                if stats[linespl[0]].inc_only:
-                    if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
-                        increment_only[linespl[0]] = stats[linespl[0]].value
-                        io_change = True
-                    elif stats[linespl[0]].value < increment_only[linespl[0]]:
-                        stats[linespl[0]].value = increment_only[linespl[0]]
+    for stat_entry in stat_info:
+        if len(stat_entry) == 3:
+            locinfo = {'source': achdata_source, 'appid': appid, 'name': stat_entry[0]}
+            locinfo['source_extra'] = source_extra
+            if achdata_source == 'sse':
+                c = zlib.crc32(bytes(stat_entry[0], 'utf-8'))
+                source_stat_ids[c] = stat_entry[0]
+            stats[stat_entry[0]] = Stat(locinfo, stat_entry[1], stat_entry[2], stg['delay_read_change'], stat_dnames, increment_only_names)
+
+            if stats[stat_entry[0]].inc_only:
+                if not stat_entry[0] in increment_only or (achdata_source == 'goldberg' and stats[stat_entry[0]].value > increment_only[stat_entry[0]]):
+                    increment_only[stat_entry[0]] = stats[stat_entry[0]].value
+                    io_change = True
+                elif stats[stat_entry[0]].value < increment_only[stat_entry[0]]:
+                    stats[stat_entry[0]].value = increment_only[stat_entry[0]]
 
     def load_stats():
         global stats_path, stats_last_change, io_change
         m = 'rt'
-        if achdata_source == 'sse':
+        if achdata_source in ('sse', 'steam_local'):
             m = 'rb'
         statsdata = {}
         try:
@@ -1597,7 +2218,9 @@ def load_everything(reload=False, keep_data=False):
             stats_last_change = stamp
             with open(stats_path, m) as statsfile:
                 statsdata = statsfile.read()
-            statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
+            if achdata_source == 'steam_local':
+                statsdata = vdf.binary_loads(statsdata)
+            statsdata = convert_stats_format(stats, statsdata, achdata_source, source_stat_ids)
         except FileNotFoundError:
             stats_last_change = None
         except Exception as ex:
@@ -1678,7 +2301,7 @@ def load_everything(reload=False, keep_data=False):
         except FileNotFoundError:
             pass
 
-    config_from_fork = os.path.isdir(f'games/{appid}/img')
+    config_from_fork = not schema_as_config and os.path.isdir(f'games/{appid}/img')
     icons_path = f'games/{appid}/achievement_images'
     if config_from_fork:
         icons_path = f'games/{appid}/img'
@@ -1694,16 +2317,11 @@ def load_everything(reload=False, keep_data=False):
                 achs[i].icon = achs[i].icon[4:]
             if achs[i].icon_gray != None and achs[i].icon_gray[:4] =='img/':
                 achs[i].icon_gray = achs[i].icon_gray[4:]
-        if achs[i].icon != None and not achs[i].icon in ach_icons:
-            try:
-                ach_icons[achs[i].icon] = pygame.image.load(os.path.join(icons_path, achs[i].icon))
-            except pygame.error:
-                ach_icons[achs[i].icon] = None
-        if achs[i].icon_gray != None and not achs[i].icon_gray in ach_icons:
-            try:
-                ach_icons[achs[i].icon_gray] = pygame.image.load(os.path.join(icons_path, achs[i].icon_gray))
-            except pygame.error:
-                ach_icons[achs[i].icon_gray] = None
+
+        if achs[i].icon != None:
+            ach_icons[achs[i].icon] = None
+        if achs[i].icon_gray != None:
+            ach_icons[achs[i].icon_gray] = None
 
         languages_used.add(achs[i].language)
         languages_used.add(achs[i].language_d)
@@ -1783,12 +2401,70 @@ def load_everything(reload=False, keep_data=False):
         with open(f'{save_dir}/path.txt', 'w') as pathfile:
             pathfile.write(source_extra[5:])
 
+    missing_icons = []
     for i in ach_icons:
-        if ach_icons[i] == None: continue
+        if i.startswith('img/'):
+            os.makedirs(f'games/{appid}/img')
+            print('Config type wasn\'t detected correctly ("img" folder was missing), restart to download icons')
+            sys.exit()
+        if not os.path.isfile(os.path.join(icons_path, i)):
+            missing_icons.append(i)
+    if not keep_data and len(missing_icons) > 0:
+        if not download_icons:
+            print('Icons not found:', len(missing_icons))
+            print('Press ENTER to download or write anything to ignore')
+            download_icons = input(show_output_lines=2) == ''
+        if download_icons:
+            if not os.path.isdir(icons_path):
+                os.makedirs(icons_path)
+            base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
+                          'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
+            done = 0
+            total = len(missing_icons)
+            skipped = 0
+            skip_all = False
+            for i in missing_icons:
+                if screen_exists:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            sys.exit()
+                    draw_progressbar(0, stg['window_size_y'] - 10, stg['window_size_x'], 10, done, total)
+                    pygame.display.update(pygame.Rect(0, stg['window_size_y'] - 10, stg['window_size_x'], 10))
+                done += 1
+                print(f'[{done}/{total}] {i}')
+                while True:
+                    success = False
+                    for u in base_urls:
+                        url = u + appid + '/' + i
+                        try:
+                            urllib.request.urlretrieve(url, os.path.join(icons_path, i))
+                            success = True
+                            break
+                        except Exception as ex:
+                            pass
+                    if success: break
+                    print('Failed to download icon. ENTER - retry, "s" - skip, "end" - skip all')
+                    inp = input(show_output_lines=2)
+                    if inp in ('s', 'end'):
+                        skipped += 1
+                        skip_all = inp == 'end'
+                        break
+                if skip_all:
+                    skipped += total - done
+                    break
+            finish_text = 'Finished downloading icons'
+            if skipped > 0: finish_text += f' ({skipped} skipped)'
+            print(finish_text)
+
+    for i in ach_icons:
+        try:
+            ach_icons[i] = pygame.image.load(os.path.join(icons_path, i))
+        except (FileNotFoundError, pygame.error):
+            continue
         size = (ach_icons[i].get_width(), ach_icons[i].get_height())
         if size != (64, 64):
             if stg['smooth_scale']:
-                ach_icons[i] = pygame.transform.smoothscale(ach_icons[i].convert_alpha(), (64, 64))
+                ach_icons[i] = pygame.transform.smoothscale(ach_icons[i], (64, 64))
             else:
                 ach_icons[i] = pygame.transform.scale(ach_icons[i], (64, 64))
 
@@ -2067,10 +2743,18 @@ def load_everything(reload=False, keep_data=False):
 
             send_notification(title, message, icon)
 
-    if len(ach_percentages) > 0 and len(ach_idxs) > 0 and set(ach_percentages) != set(ach_idxs):
-        t = datetime.now().strftime(stg['strftime'])
-        ch = {'time_real': t, 'time_action': t}
-        create_notification('schema_change', ch)
+    pygame.display.set_caption(f'Achievements | {gamename}')
+    pygame.display.set_allow_screensaver(True)
+    screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+    screen_exists = True
+    if stg['exp_no_cmd_input_auto']:
+        stg['exp_no_cmd_input'] = True
+
+    if not keep_data:
+        if len(ach_percentages) > 0 and len(ach_idxs) > 0 and set(ach_percentages) != set(ach_idxs):
+            t = datetime.now().strftime(stg['strftime'])
+            ch = {'time_real': t, 'time_action': t}
+            create_notification('schema_change', ch)
 
     if os.path.isfile(f'{save_dir}/{appid}_history.json'):
         if stg['exp_history_autosave_auto']:
@@ -2078,17 +2762,52 @@ def load_everything(reload=False, keep_data=False):
         if not reload and stg['exp_history_autosave']:
             load_hist()
 
+    global cmp_data, cmp_saved_targets, cmp_stg, cmp_global_targets, cmp_mark_rare, cmp_mark_rare_remove
+
+    if os.path.isfile('save/compare/global.json'):
+        with open('save/compare/global.json') as f:
+            cmp_global_targets = json.load(f)
+
+    if not reload:
+        if os.path.isfile(f'save/compare/{appid}.json'):
+            with open(f'save/compare/{appid}.json') as f:
+                cmp_save = json.load(f)
+            cmp_data = cmp_save['cmp_data']
+            cmp_saved_targets = [(target, cmp_data[target]['id']) for target in cmp_data]
+            cmp_stg.update(cmp_save['cmp_stg'])
+            for target in cmp_data:
+                cmp_count_target_unlocks(target)
+        else:
+            if os.path.isfile(f'save/compare/global_stg.json'):
+                with open('save/compare/global_stg.json') as f:
+                    cmp_stg.update(json.load(f))
+            if stg['exp_cmp_autoload_global'] and len(cmp_global_targets) > 0 and (len(achs) > 0 or len(stats) > 0):
+                threading.Thread(target=cmp_load_global, args=(True, ), daemon=True).start()
+
+    if not keep_data:
+        if len(cmp_data) > 0:
+            threading.Thread(target=cmp_reload, args=(True, ), daemon=True).start()
+        if cmp_stg['mark_rare'] == -1:
+            cmp_mark_rare = -1
+            cmp_mark_rare_remove = False
+    elif len(cmp_data) > 0 and cmp_mark_rare != -1:
+        cmp_mark_rare_achs(cmp_mark_rare, cmp_mark_rare_remove)
+
     globals().update(locals())
 
 load_everything()
 
+if len(cmp_data) > 0 or (stg['exp_cmp_autoload_global'] and len(cmp_global_targets) > 0 and (len(achs) > 0 or len(stats) > 0)):
+    cmp_init()
+
 while running:
 
     if last_console_len != len(internal_console) + console_lines_erased:
-        new_console_line = True
-        last_console_len = len(internal_console) + console_lines_erased
+        if stg['sound'] and sounds[0.5] != None:
+            pygame.mixer.Sound.play(sounds[0.5])
         if viewing == 'console':
             flip_required = True
+        last_console_len = len(internal_console) + console_lines_erased
 
     update_time = time.time() >= last_update + stg['delay']
     if update_time or 1 in steam_requests_state.values():
@@ -2096,10 +2815,6 @@ while running:
         notifications_sent = 0
         notifications_hidden = 0
         sound_to_play = 0
-        if new_console_line:
-            if stg['sound'] and sounds[0.5] != None:
-                sound_to_play = 0.5
-            new_console_line = False
         fu_change = False
         ts_change = set()
         ts_lost = False
@@ -2107,6 +2822,17 @@ while running:
 
         if update_time:
             last_update = time.time()
+
+        if achdata_source == 'steam_local' and not stl_ids_loaded:
+            if os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')):
+                with open(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'), 'rb') as f:
+                    data_from_schema = process_schema(appid, vdf.binary_loads(f.read()), ids_only=True)
+                source_ach_ids = data_from_schema['ach_ids']
+                source_stat_ids = data_from_schema['stat_ids']
+                stl_ids_loaded = True
+                fchecker_achieved.last_check = None
+                stats_last_change = -1.0
+                stats_delay_counter = stg['delay_stats']
 
         if achdata_source != 'steam':
             changed, newdata = fchecker_achieved.check()
@@ -2119,7 +2845,7 @@ while running:
             stats_changed = False
             if steam_requests_state['stats'] == 1:
                 if 'stats' in steam_requests_data['stats']['playerstats']:
-                    stats_changed = 'stats' in steam_requests_data['stats']['playerstats']
+                    stats_changed = True
                     stat_response = steam_requests_data['stats']
                 steam_requests_state['stats'] = 2
 
@@ -2139,10 +2865,10 @@ while running:
         if changed:
 
             if achdata_source != 'goldberg' and newdata != None:
-                newdata = convert_achs_format(newdata, achdata_source, achs_crc32)
+                newdata = convert_achs_format(newdata, achdata_source, source_ach_ids)
 
             if newdata != None:
-                achieved_json = newdata # To avoid Ctrl+Shift+R reverting progress
+                achieved_json = newdata # To prevent Ctrl+Shift+R from reverting progress
             else:
                 achieved_json.clear()
 
@@ -2330,6 +3056,8 @@ while running:
                     filter_needed = True
                 elif event.key == pygame.K_BACKSPACE:
                     search_request = search_request[:-1]
+                    if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                        search_request = ''
                 elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     search_request += pyperclip.paste()
                 else:
@@ -2403,21 +3131,33 @@ while running:
                 elif viewing == 'console':
                     scroll_console = 0
                 flip_required = True
-            elif event.key == pygame.K_f and viewing == 'achs' and header_extra[:6] != 'search' and search_request == '':
-                keys = pygame.key.get_pressed()
-                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
-                    header_extra = 'search'
+            elif event.key == pygame.K_f:
+                if viewing == 'achs' and header_extra[:6] != 'search' and search_request == '':
+                    keys = pygame.key.get_pressed()
+                    if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                        header_extra = 'search'
+                        flip_required = True
+                elif viewing == 'compare' and len(cmp_data) > 0:
+                    if cmp_filter == '':
+                        cmp_filter = input('Filter conditions: ')
+                    else:
+                        cmp_filter = ''
+                    filter_needed = True
                     flip_required = True
             elif event.key == pygame.K_d:
                 keys = pygame.key.get_pressed()
                 if not 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if viewing == 'compare' and len(cmp_data) > 0 and not (cmp_reloading or cmp_loading_global):
+                        cmp_delete()
+                    elif viewing == 'compare_save' and len(cmp_global_targets) > 0 and not cmp_loading_global:
+                        cmp_delete_global()
                     continue
                 if not 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
                     print('Using internal ach_dumper')
                     if keys[pygame.K_TAB] == 1:
                         stg_ad = load_settings(appid, achdata_source, True)
                     ach_dumper()
-                elif viewing in ('achs', 'stats', 'history_unlocks'):
+                elif viewing in ('achs', 'stats', 'history_unlocks') and cmp_unlock_history == '':
                     if os.path.isfile('ach_dumper.py'):
                         command = f'python ach_dumper.py'
                         print('Using ach_dumper.py')
@@ -2464,7 +3204,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.5.1e1')
+                    print(' - Version: v1.6.0e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -2486,15 +3226,42 @@ while running:
                 elif viewing == 'console_line':
                     viewing = 'console'
                     flip_required = True
+                elif viewing == 'compare':
+                    viewing = viewing_before_compare
+                    cmp_page = 1
+                    if viewing == 'history_unlocks':
+                        filter_needed = True
+                    flip_required = True
+                elif viewing == 'compare_save':
+                    viewing = 'compare'
+                    cmp_page = 1
+                    flip_required = True
             elif event.key == pygame.K_c:
+                if viewing == 'compare' and cmp_init_done:
+                    if cmp_stg['owners_count'] != -1:
+                        cmp_stg['owners_count'] = -1
+                        cmp_unsaved_changes = True
+                        cmp_unsaved_changes_global = True
+                        flip_required = True
+                    else:
+                        inp = input('Min unlock count to hide names: ')
+                        if inp.isnumeric():
+                            cmp_stg['owners_count'] = int(inp)
+                            cmp_unsaved_changes = True
+                            cmp_unsaved_changes_global = True
+                            flip_required = True
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     if viewing == 'console_line':
                         pyperclip.copy(viewing_line['text'])
+                    elif not viewing in ('console', 'console_line', 'compare', 'compare_save') and cmp_unlock_history == '':
+                        viewing_before_compare = viewing
+                        viewing = 'compare'
+                        flip_required = True
             elif event.key == pygame.K_w:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
-                    if achdata_source == 'steam':
+                    if achdata_source in ('steam', 'steam_local'):
                         print("Can't wipe Steam progress")
                     elif not stg['exp_allow_wiping']:
                         print('Progress wiping must be allowed in settings')
@@ -2509,7 +3276,7 @@ while running:
                         if achdata_source == 'goldberg':
                             if os.path.isdir(p):
                                 shutil.rmtree(p)
-                        elif achdata_source != 'sse':
+                        else:
                             if os.path.isfile(p):
                                 os.remove(p)
 
@@ -2542,12 +3309,14 @@ while running:
             elif event.key == pygame.K_r:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
-                    stg_to_keep = {}
-                    for s in ['sort_by_rarity', 'unlocks_on_top', 'unlocks_timesort', 'secrets', 'secrets_listhide']:
-                        stg_to_keep[s] = stg[s]
                     rld = not 1 in (keys[pygame.K_LALT], keys[pygame.K_RALT])
                     kd = rld and 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
                     load_everything(rld, kd)
+                else:
+                    if viewing == 'compare' and cmp_is_reload_possible():
+                        threading.Thread(target=cmp_reload, daemon=True).start()
+                    elif viewing == 'compare_save' and len(cmp_global_targets) > 0 and not (cmp_reloading or cmp_loading_global):
+                        threading.Thread(target=cmp_load_global, daemon=True).start()
             elif event.key == pygame.K_g and viewing in ('achs', 'history_unlocks'):
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -2557,6 +3326,98 @@ while running:
                         scroll //= achs_to_show_horiz
                     grid_view = not grid_view
                     flip_required = True
+            elif event.key == pygame.K_RETURN and viewing == 'compare' and not cmp_init_done:
+                keys = pygame.key.get_pressed()
+                cmp_init()
+                if not 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
+                    cmp_add(True)
+            elif event.key == pygame.K_a:
+                if viewing == 'compare' and cmp_init_done and not (cmp_reloading or cmp_loading_global):
+                    keys = pygame.key.get_pressed()
+                    cmp_add(1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]))
+                elif viewing == 'compare_save' and not cmp_loading_global:
+                    keys = pygame.key.get_pressed()
+                    cmp_add_global(1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]))
+            elif event.key == pygame.K_s:
+                if viewing == 'compare' and cmp_init_done:
+                    viewing = 'compare_save'
+                    cmp_page = 1
+                    flip_required = True
+                elif viewing == 'compare_save' and cmp_unsaved_changes and not (cmp_reloading or cmp_loading_global):
+                    cmp_save_game_targets()
+                    flip_required = True
+            elif event.key == pygame.K_l and viewing == 'compare_save':
+                cmp_save_list_shown = not cmp_save_list_shown
+                cmp_page = 1
+                flip_required = True
+            elif event.key == pygame.K_t and viewing == 'compare' and cmp_init_done:
+                cmp_stg['stat_lb'] = not cmp_stg['stat_lb']
+                cmp_unsaved_changes = True
+                cmp_unsaved_changes_global = True
+                flip_required = True
+            elif event.key == pygame.K_u and viewing == 'compare' and cmp_init_done:
+                cmp_stg['unlock_lb'] = not cmp_stg['unlock_lb']
+                cmp_unsaved_changes = True
+                cmp_unsaved_changes_global = True
+                flip_required = True
+            elif event.key == pygame.K_SPACE and viewing == 'compare' and cmp_init_done:
+                cmp_stg['sort_targets'] = not cmp_stg['sort_targets']
+                cmp_unsaved_changes = True
+                cmp_unsaved_changes_global = True
+                flip_required = True
+            elif event.key == pygame.K_o:
+                if viewing == 'compare' and (len(cmp_data) > 0 or cmp_sorted):
+                    cmp_sorted = not cmp_sorted
+                    filter_needed = True
+                    flip_required = True
+                elif viewing == 'compare_save' and cmp_unsaved_changes_global:
+                    if not os.path.isdir('save/compare'):
+                        os.makedirs('save/compare')
+                    with open(f'save/compare/global_stg.json', 'w') as f:
+                        json.dump(cmp_stg, f, indent=4)
+                    cmp_unsaved_changes_global = False
+                    flip_required = True
+            elif event.key == pygame.K_m:
+                if viewing == 'compare' and ((len(cmp_data) > 0 and not cmp_reloading) or cmp_mark_rare != -1):
+                    if cmp_mark_rare == -1:
+                        inp = input('Max unlock count to mark as rare: ')
+                        if inp.isnumeric():
+                            cmp_mark_rare = int(inp)
+                            cmp_mark_rare_remove = not input('Remove existing rare flags first? (Y/n) ').lower() == 'n'
+                            cmp_mark_rare_achs(cmp_mark_rare, cmp_mark_rare_remove)
+                            flip_required = True
+                    else:
+                        if cmp_stg['mark_rare'] == -1:
+                            cmp_stg['mark_rare'] = cmp_mark_rare
+                            cmp_stg['mark_rare_remove'] = cmp_mark_rare_remove
+                        else:
+                            cmp_stg['mark_rare'] = -1
+                            cmp_stg['mark_rare_remove'] = False
+                        cmp_unsaved_changes = True
+                        cmp_unsaved_changes_global = True
+                        flip_required = True
+                if viewing == 'compare_save' and cmp_is_merge_possible():
+                    cmp_merge_into_global()
+            elif event.key == pygame.K_TAB and viewing == 'compare' and cmp_init_done:
+                cmp_stg['time'] = not cmp_stg['time']
+                flip_required = True
+            elif event.key == pygame.K_p and viewing in ('compare', 'compare_save'):
+                cmp_page += 1
+                flip_required = True
+            elif event.key == pygame.K_h and viewing == 'compare' and len(cmp_data) > 0:
+                target_name = input('Show unlock history for target: ')
+                if target_name in cmp_data:
+                    cmp_unlock_history = target_name
+                    viewing = 'history_unlocks'
+                    listhide_before_cmp_uhist = stg['secrets_listhide']
+                    if stg['secrets'] == 'hide':
+                        stg['secrets_listhide'] = True
+                    scroll_achs_copy_cmphist = scroll
+                    scroll = 0
+                    filter_needed = True
+                elif target_name != '':
+                    print('Target does not exist:', target_name)
+                flip_required = True
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -2738,6 +3599,12 @@ while running:
                         print(' - Increment-only')
                         if s.value != s.real_value:
                             print(f' - Real value: {s.real_value}')
+                    if len(cmp_data) > 0:
+                        lb = cmp_stat_lb(s.name)
+                        if len(lb) > 0:
+                            print(' - Comparison')
+                        for x in lb:
+                            print(f' - - {x[0]} : {x[1]}')
             elif viewing == 'history':
                 if len(history) > achs_to_show and event.pos[0] >= stg['window_size_x'] - 10 and event.pos[1] >= header_h:
                     mouse_scrolling = True
@@ -2773,10 +3640,16 @@ while running:
                 if len(achs_f) > achs_to_show and event.pos[0] >= stg['window_size_x'] - 10 and event.pos[1] >= header_h:
                     mouse_scrolling = True
                 elif btn_locs['back'].collidepoint(event.pos):
-                    scroll = scroll_achs_copy
                     filter_needed = True
-                    # viewing = 'achs'
-                    viewing = 'history'
+                    if cmp_unlock_history == '':
+                        scroll = scroll_achs_copy
+                        # viewing = 'achs'
+                        viewing = 'history'
+                    else:
+                        cmp_unlock_history = ''
+                        scroll = scroll_achs_copy_cmphist
+                        stg['secrets_listhide'] = listhide_before_cmp_uhist
+                        viewing = 'compare'
                 # elif pygame.Rect(stg['window_size_x'] - 162, 10, 88, 22).collidepoint(event.pos):
                     # scroll = scroll_achs_copy
                     # achs_f, secrets_hidden = filter_achs(achs, state_filter, stg)
@@ -2847,6 +3720,13 @@ while running:
                         print(f' - Rarity: {a.rarity}%')
                     if not stg['show_timestamps'] and a.earned:
                         print(f' - Unlocked: {a.get_time(stg)}')
+                    if len(cmp_data) > 0:
+                        lb = cmp_unlock_time_lb(a.name)
+                        lb.reverse()
+                        if len(lb) > 0:
+                            print(' - Comparison')
+                        for x in lb:
+                            print(f" - - {x[0]} : {datetime.fromtimestamp(x[1]).strftime(stg['strftime'])}")
                 except Exception as ex:
                     print(f'Error when printing achievement info: {type(ex).__name__}')
 
@@ -2889,7 +3769,12 @@ while running:
 
     if filter_needed:
         if viewing != 'history_unlocks':
-            achs_f = filter_achs(achs, state_filter, stg)
+            if cmp_filter == '':
+                achs_f = filter_achs(achs, state_filter, stg)
+            else:
+                achs_f = filter_achs(cmp_filter_achs(cmp_filter), state_filter, stg)
+            if cmp_sorted:
+                achs_f.sort(key=lambda a : sum([owned_by(x, a) for x in cmp_data]), reverse=True)
             if search_request != '' and header_extra != 'search':
                 results = []
                 dummy_place = -1
@@ -2911,10 +3796,15 @@ while running:
                         results.pop(dummy_place)
                 achs_f = results
         else:
-            fake_stg = {'unlockrates': 'none', 'secrets': 'normal',
-                'unlocks_on_top': False, 'unlocks_timesort': True,
-                'savetime_shown': stg['savetime_shown']}
-            achs_f = filter_achs(achs, 1, fake_stg)
+            if cmp_unlock_history != '':
+                achs_f = cmp_filter_achs(cmp_unlock_history)
+                achs_f.reverse()
+                achs_f.sort(key=lambda a : cmp_get_time(cmp_unlock_history, a), reverse=True)
+            else:
+                fake_stg = {'unlockrates': 'none', 'secrets': 'normal',
+                            'unlocks_on_top': False, 'unlocks_timesort': True,
+                            'savetime_shown': stg['savetime_shown']}
+                achs_f = filter_achs(achs, 1, fake_stg)
         filter_needed = False
 
     y = pygame.mouse.get_pos()[1]
@@ -2980,6 +3870,10 @@ while running:
             draw_console()
         elif viewing == 'console_line':
             draw_console_line()
+        elif viewing == 'compare':
+            draw_cmp_menu()
+        elif viewing == 'compare_save':
+            draw_cmp_save_menu()
         flip_required = False
 
     time.sleep(stg['delay_sleep'])

@@ -1,3 +1,14 @@
+## v1.6.0
+- Comparison features for loading and viewing friends' progress
+- Added `generate_inc_only()`
+- Added `invset()`
+- New `edit()` value (`Steam/appcache/stats`)
+- Allow `list_langs()` with no argument (default value is `get_hover()`)
+- Fix `load_everything(True, True)` crash if used from `Ctrl+E` before using `Ctrl+R` once. Caused by `stg_to_keep` creation not being a part of `load_everything()`
+- Added `exp_no_cmd_input_auto` to enable `exp_no_cmd_input` once the window is opened (enabled by default)
+- Separated `exp_sound_console` code from the code responsible for choosing which sound to play for notifications
+- `Ctrl+Shift+R` no longer repeats "Achievement list has changed" notification
+
 ## v1.5.1e1
 - Fix crash instead of "Achievement list has changed" notification
 - Set window title even if no game has been loaded yet (when AppID input is requested through the main window)

@@ -4,6 +4,7 @@ import platform
 import json
 import time
 import struct
+import vdf
 from experimental import *
 
 if platform.uname().system == 'Windows':
@@ -51,6 +52,8 @@ def get_player_achs_path(source, appid, extra=None):
             return os.path.join(os.environ['APPDATA'], 'SmartSteamEmu', extra, appid, 'stats.bin')
         else:
             return os.path.join(extra[5:], appid, 'stats.bin')
+    elif source == 'steam_local':
+        return os.path.join(get_steam_path(), f'appcache/stats/UserGameStats_{extra}_{appid}.bin')
     else:
         print('Unable to determine location of player progress')
         sys.exit()
@@ -92,9 +95,18 @@ def get_stats_path(source, appid, extra=None):
             return os.path.join(os.environ['APPDATA'], 'SmartSteamEmu', extra, appid, 'stats.bin')
         else:
             return os.path.join(extra[5:], appid, 'stats.bin')
+    elif source == 'steam_local':
+        return os.path.join(get_steam_path(), f'appcache/stats/UserGameStats_{extra}_{appid}.bin')
     else:
         print('Unable to determine location of player stats')
         sys.exit()
+
+def get_steam_path():
+    p = 'C:/Program Files (x86)/Steam'
+    if os.path.isfile('games/steam_path.txt'):
+        with open('games/steam_path.txt') as f:
+            p = f.read()
+    return p
 
 class FileChecker:
     def __init__(self, filetype, locinfo, sleep_t):
@@ -143,12 +155,14 @@ class FileChecker:
 
                 if self.filetype == 'player_achs':
                     m = 'rt'
-                    if self.source == 'sse':
+                    if self.source in ('sse', 'steam_local'):
                         m = 'rb'
                     with open(self.path, m) as changed_file:
                         try:
                             if self.source == 'goldberg':
                                 newdata = json.load(changed_file)
+                            elif self.source == 'steam_local':
+                                newdata = vdf.binary_loads(changed_file.read())
                             else:
                                 newdata = changed_file.read()
                         except Exception as ex:
@@ -168,22 +182,8 @@ class FileChecker:
                                 print(f"Failed to read file (stat: {self.locinfo['name']}) - {type(ex).__name__}")
                                 self.last_check = 'Retry'
                                 return False, None
-                    elif self.source in ('codex', 'ali213'):
-                        with open(self.path) as changed_file:
-                            try:
-                                newdata = changed_file.read()
-                            except Exception as ex:
-                                print(f'Failed to read file (stats) - {type(ex).__name__}')
-                                self.last_check = 'Retry'
-                                return False, None
-                    elif self.source == 'sse':
-                        with open(self.path, 'rb') as changed_file:
-                            try:
-                                newdata = changed_file.read()
-                            except Exception as ex:
-                                print(f'Failed to read file (stats) - {type(ex).__name__}')
-                                self.last_check = 'Retry'
-                                return False, None
+                    else:
+                        return False, None
                 return True, newdata
             else:
                 return False, None

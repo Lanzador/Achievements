@@ -6,10 +6,11 @@ import zlib
 import requests
 from datetime import datetime
 from random import randint
+import vdf
 
 from settings import *
-from filechanges import get_player_achs_path, get_stats_path
-from achievements import convert_achs_format
+from filechanges import get_player_achs_path, get_stats_path, get_steam_path
+from achievements import convert_achs_format, process_schema
 from stats import Stat, convert_stats_format
 
 def send_steam_request(name, link):
@@ -76,10 +77,10 @@ else:
     gamename = get_game_name(appid)
 
 achs = []
-achs_crc32 = {}
+source_ach_ids = {}
 unlocks = {}
 stats = {}
-stats_crc32 = {}
+source_stat_ids = {}
 values = {}
 timestamps = {}
 forced = {}
@@ -90,6 +91,8 @@ inc_only = {}
 
 path_achs = f'games/{appid}/achievements.json'
 path_stats = f'games/{appid}/stats.txt'
+path_stats_json = f'games/{appid}/stats.json'
+path_schema = f'games/{appid}/UserGameStatsSchema_{appid}.bin'
 if achdata_source != 'steam':
     path_unlocks = get_player_achs_path(achdata_source, appid, source_extra)
     path_values = get_stats_path(achdata_source, appid, source_extra)
@@ -102,7 +105,13 @@ path_inc_only = f'{save_dir}/{appid}_inc_only.json'
 
 url_random = randint(0, 10000000)
 
-if os.path.isfile(path_achs):
+schema_as_config = os.path.isfile(path_schema)
+
+if schema_as_config:
+    with open(path_schema, 'rb') as f:
+        data_from_schema = process_schema(appid, vdf.binary_loads(f.read()))
+    achs = data_from_schema['achs']
+elif os.path.isfile(path_achs):
     with open(path_achs) as f:
         achs = json.load(f)
 
@@ -116,19 +125,26 @@ if os.path.isfile(path_inc_only_n):
         with open(path_inc_only) as f:
             inc_only = json.load(f)
 
-if os.path.isfile(path_stats):
+stat_info = []
+if schema_as_config:
+    stat_info = data_from_schema['stats']
+elif os.path.isfile(path_stats):
     with open(path_stats) as f:
-        stats = f.read()
-    lines = stats.split('\n')
-    stats = {}
-    for l in lines:
-        spl = l.split('=')
-        if len(spl) == 3:
-            locinfo = {'source': achdata_source, 'appid': appid, 'name': spl[0]}
-            locinfo['source_extra'] = source_extra
-            if achdata_source == 'sse':
-                stats_crc32[zlib.crc32(bytes(spl[0], 'utf-8'))] = spl[0]
-            stats[spl[0]] = Stat(locinfo, spl[1], spl[2], stg['delay_read_change'], dnames, inc_only_n)
+        statlines = f.read().split('\n')
+    for line in statlines:
+        stat_info.append(line.rsplit('=', 2))
+elif os.path.isfile(path_stats_json):
+    with open(path_stats_json) as f:
+        statjson = json.load(f)
+    for s in statjson:
+        stat_info.append([s['name'], s['type'], s['default']])
+for stat_entry in stat_info:
+    if len(stat_entry) == 3:
+        locinfo = {'source': achdata_source, 'appid': appid, 'name': stat_entry[0]}
+        locinfo['source_extra'] = source_extra
+        if achdata_source == 'sse':
+            source_stat_ids[zlib.crc32(bytes(stat_entry[0], 'utf-8'))] = stat_entry[0]
+        stats[stat_entry[0]] = Stat(locinfo, stat_entry[1], stat_entry[2], stg['delay_read_change'], dnames, inc_only_n)
 
 if os.path.isfile(path_time):
     with open(path_time) as f:
@@ -159,17 +175,30 @@ elif achdata_source != 'steam':
     if achdata_source == 'sse':
         m = 'rb'
         for a in achs:
-            achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+            source_ach_ids[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+    elif achdata_source == 'steam_local':
+        m = 'rb'
+        path_schema_appcache = os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')
+        if schema_as_config or os.path.isfile(path_schema_appcache):
+            if not schema_as_config:
+                with open(path_schema_appcache, 'rb') as f:
+                    data_from_schema = process_schema(appid, vdf.binary_loads(f.read()), ids_only=True)
+            source_ach_ids = data_from_schema['ach_ids']
+            source_stat_ids = data_from_schema['stat_ids']
 
     if os.path.isfile(path_unlocks):
         with open(path_unlocks, m) as f:
             unlocks = f.read()
-        unlocks = convert_achs_format(unlocks, achdata_source, achs_crc32)
+        if achdata_source == 'steam_local':
+            unlocks = vdf.binary_loads(unlocks)
+        unlocks = convert_achs_format(unlocks, achdata_source, source_ach_ids)
 
     if os.path.isfile(path_values):
         with open(path_values, m) as f:
             values = f.read()
-        values = convert_stats_format(stats, values, achdata_source, stats_crc32)
+        if achdata_source == 'steam_local':
+            values = vdf.binary_loads(values)
+        values = convert_stats_format(stats, values, achdata_source, source_stat_ids)
         for s in stats:
             if stats[s].type in ('int', 'float') and s in values:
                 stats[s].value = values[s]
@@ -359,8 +388,10 @@ for a in achs_obj:
     elif len(stg['hidden_desc']) > 0:
         text += '\n' + stg['hidden_desc']
 
-    if a.unlock:
+    if a.unlock and stg['show_timestamps']:
         text += '\n' + f"[Unlocked - {datetime.fromtimestamp(a.time).strftime(stg['strftime'])}]"
+    elif a.unlock:
+        text += '\n[Unlocked]'
     else:
         text += '\n[Locked]'
 
