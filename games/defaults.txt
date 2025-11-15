@@ -6,3 +6,4 @@ codex=
 ali213=
 sse=
 steam=
+steam_local=

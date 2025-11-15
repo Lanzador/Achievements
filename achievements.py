@@ -283,7 +283,7 @@ def update_achs(achs, newdata, achsfile, stg):
 
     return (achs, changes)
 
-def convert_achs_format(data, source, achs_crc32=None):
+def convert_achs_format(data, source, source_ach_ids=None):
     try:
         conv = {}
         if source in ('codex', 'ali213'):
@@ -326,8 +326,8 @@ def convert_achs_format(data, source, achs_crc32=None):
             for i in range(struct.unpack('i', data[:4])[0]):
                 e = data[4 + 24 * i : 28 + 24 * i]
                 c = struct.unpack('I', e[0:4])[0]
-                if c in achs_crc32:
-                    achname = achs_crc32[c]
+                if c in source_ach_ids:
+                    achname = source_ach_ids[c]
                     conv[achname] = {}
                     conv[achname]['earned'] = bool(struct.unpack('i', e[20:24])[0])
                     conv[achname]['earned_time'] = float(struct.unpack('i', e[8:12])[0])
@@ -337,7 +337,68 @@ def convert_achs_format(data, source, achs_crc32=None):
                 conv[achname] = {}
                 conv[achname]['earned'] = bool(ach['achieved'])
                 conv[achname]['earned_time'] = float(ach['unlocktime'])
+        elif source == 'steam_local':
+            data = data['cache']
+            for group in source_ach_ids:
+                if not group in data: continue
+                for bit in source_ach_ids[group]:
+                    achname = source_ach_ids[group][bit]
+                    conv[achname] = {}
+                    conv[achname]['earned'] = data[group]['data'] & 2 ** bit
+                    conv[achname]['earned_time'] = 0.0
+                    if 'AchievementTimes' in data[group] and str(bit) in data[group]['AchievementTimes']:
+                        conv[achname]['earned_time'] = float(data[group]['AchievementTimes'][str(bit)])
         return conv
     except Exception as ex:
         print(f'Failed to convert achievements - {type(ex).__name__}')
         return {}
+
+def process_schema(appid, data, ids_only=False):
+    out = {'achs': [],
+           'stats': [],
+           'stat_dnames': {},
+           'stats_io': [],
+           'ach_ids': {},
+           'stat_ids': {}}
+
+    stat_types = {'1': 'int', '2': 'float', '3': 'avgrate'}
+
+    for s in data[appid]['stats'].values():
+        if s['type'] in stat_types:
+            out['stat_ids'][s['id']] = s['name']
+            if ids_only: continue
+
+            default = None
+            if 'Default' in s: default = s['Default']
+            elif 'default' in s: default = s['default']
+            if default != None:
+                try:
+                    float(default)
+                except ValueError:
+                    default = None
+            if default == None:
+                if 'min' in s: default = s['min']
+                else: default = '0'
+
+            out['stats'].append([s['name'], stat_types[s['type']], default])
+            out['stat_dnames'][s['name']] = s['display']['name']
+            if int(s.get('incrementonly', 0)) == 1: out['stats_io'].append(s['name'])
+        elif s['type'] == '4':
+            id_dict = {}
+            for b in s['bits'].values():
+                id_dict[b['bit']] = b['name']
+                if ids_only: continue
+                ach = {}
+                if 'hidden' in b['display']: ach['hidden'] = b['display']['hidden']
+                elif 'Hidden' in b['display']: ach['hidden'] = b['display']['Hidden']
+                else: ach['hidden'] = '0'
+                ach['displayName'] = b['display']['name']
+                ach['description'] = b['display']['desc']
+                ach['icon'] = b['display']['icon']
+                if 'icon_gray' in b['display']: ach['icon_gray'] = b['display']['icon_gray']
+                ach['name'] = b['name']
+                if 'progress' in b: ach['progress'] = b['progress']
+                out['achs'].append(ach)
+            out['ach_ids'][s['id']] = id_dict
+            
+    return out

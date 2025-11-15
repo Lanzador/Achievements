@@ -6,11 +6,13 @@ import time
 import zlib
 import threading
 import shutil
+import urllib.request
 from random import randint
 from datetime import datetime
 import pygame
 import requests
 import pyperclip
+import vdf
 from PIL import Image as PILimg
 from showtext import *
 from achievements import *
@@ -550,9 +552,16 @@ def draw_history():
                 color1 = color2
 
             progress_str = f"{history[i]['value'][0]}/{history[i]['value'][1]}"
-            prg_str_len = time_font.size(progress_str)[0]
             title_str = long_text(screen, stg['window_size_x'] - 94 - font_regular.size(f' ({progress_str})')[0], font_regular, 'Progress: ' + history[i]['ach'].display_name_np, None, (255, 255, 255), True)
             show_text(screen, font_regular, f'{title_str} ({progress_str})', (84, header_h + (i - scroll_history) * 74), color1)
+
+            if stg['bar_percentage'] != 'no':
+                bar_percentage = round_down(history[i]['value'][0] / history[i]['value'][1] * 100, 1) + '%'
+                if stg['bar_percentage'] == 'show':
+                    progress_str += f' ({bar_percentage})'
+                else:
+                    progress_str = bar_percentage
+            prg_str_len = time_font.size(progress_str)[0]
 
             if not can_show_desc:
                 multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll_history) * 74), color2)
@@ -638,8 +647,10 @@ def ach_dumper():
             elif len(stg_ad['hidden_desc']) > 0:
                 text += '\n' + stg_ad['hidden_desc']
 
-            if a.earned:
+            if a.earned and stg_ad['show_timestamps']:
                 text += '\n' + f"[Unlocked - {datetime.fromtimestamp(a.get_ts(stg_ad['savetime_shown'])).strftime(stg_ad['strftime'])}]"
+            elif a.earned:
+                text += '\n[Unlocked]'
             else:
                 text += '\n[Locked]'
 
@@ -769,15 +780,16 @@ def generator_cleanup():
     if os.path.isdir('login_temp'):
         shutil.rmtree('login_temp')
 
-if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
+new_config = False
+download_icons = False
+schema_in_appcache = os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'))
+if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}') and (stg['generator_priority'] or not schema_in_appcache):
     interrupted_gen = False
     if os.path.isdir(f'{appid}_output'):
         interrupted_gen = True
-        cfg_format = 0
         cfg_path = f'{appid}_output/steam_settings'
     elif os.path.isdir(f'output/{appid}'):
         interrupted_gen = True
-        cfg_format = 1
         cfg_path = f'output/{appid}/steam_settings'
     if interrupted_gen:
         print(f'Found possibly incomplete auto-generated config: {cfg_path}')
@@ -803,12 +815,9 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
                 i_set.add(a['icon_gray'])
         i_expected_count = len(i_set)
         i_count = 0
-        i_missing = set()
         for i in i_set:
             if os.path.isfile(f'{cfg_path}/achievement_images/{i}') or os.path.isfile(f'{cfg_path}/{i}'):
                 i_count += 1
-            else:
-                i_missing.add(i)
         print(f' - Achievements: {a_count}')
         print(f' - Stats: {s_count}')
         print(f' - Achievement icons: {i_count}/{i_expected_count}')
@@ -817,34 +826,7 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
             print(f'({i_expected_count - i_count} icons will be downloaded)')
         if input() == '':
             if i_count != i_expected_count:
-                import urllib.request
-                base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
-                              'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
-                i_path = f'{cfg_path}/achievement_images'
-                if cfg_format == 1:
-                    i_path = f'{cfg_path}/img'
-                if not os.path.isdir(i_path):
-                    os.makedirs(i_path)
-                done = 0
-                total = i_expected_count - i_count
-                for i in i_missing:
-                    if cfg_format == 1:
-                        i = i[4:]
-                    done += 1
-                    print(f'[{done}/{total}] {i}')
-                    success = False
-                    for u in range(len(base_urls)):
-                        url = base_urls[u] + appid + '/' + i
-                        try:
-                            urllib.request.urlretrieve(url, i_path + '/' + i)
-                            success = True
-                            break
-                        except Exception as ex:
-                            pass
-                    if not success:
-                        print('Failed to download icon. Restart to retry')
-                        input()
-                        sys.exit()
+                download_icons = True
             shutil.move(cfg_path, f'games/{appid}')
         generator_cleanup()
 
@@ -868,21 +850,31 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}'):
                 sys.exit()
         generator_cleanup()
 
-    if not os.path.isdir(f'games/{appid}'):
+    if os.path.isdir(f'games/{appid}'):
+        new_config = True
+    else:
         print('Failed to generate config!')
-    elif os.path.isfile('games/alias.txt'):
-        try:
-            alias = input('Alias: ')
-        except RuntimeError:
-            alias = ''
-        if alias != '':
-            emu_info = appid + ' ' + input(f'Alias target: {appid} ')
-            emu_info = emu_info.rstrip()
-            with open('games/alias.txt') as f:
-                a = f.read().split('\n')
-            a.append(emu_info + '=' + alias)
-            with open('games/alias.txt', 'w') as f:
-                f.write('\n'.join(a))
+
+if not os.path.isdir(f'games/{appid}') and schema_in_appcache:
+    os.makedirs(f'games/{appid}')
+    shutil.copy(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'),  f'games/{appid}')
+    print('Schema copied from Steam folder. Icons will be downloaded')
+    new_config = True
+    download_icons = True
+
+if new_config and os.path.isfile('games/alias.txt'):
+    try:
+        alias = input('Alias: ')
+    except RuntimeError:
+        alias = ''
+    if alias != '':
+        emu_info = appid + ' ' + input(f'Alias target: {appid} ')
+        emu_info = emu_info.rstrip()
+        with open('games/alias.txt') as f:
+            a = f.read().split('\n')
+        a.append(emu_info + '=' + alias)
+        with open('games/alias.txt', 'w') as f:
+            f.write('\n'.join(a))
 
 if 'LnzAch_gamename' in os.environ:
     gamename = os.environ['LnzAch_gamename']
@@ -924,6 +916,7 @@ if stg['unlockrates'] != 'none' and os.path.isdir(f'games/{appid}'):
                 steam_req = None
         if steam_req == None and percentdata != None:
             ach_percentages = percentdata['achievements']
+            print('Last unlock rates update:', datetime.fromtimestamp(percentdata['time']).strftime(stg['strftime']))
         elif steam_req == None:
             stg['unlockrates'] = 'none'
     else:
@@ -951,9 +944,6 @@ save_dir = get_save_dir(appid, achdata_source, source_extra)
 
 pygame.init()
 
-pygame.display.set_caption(f'Achievements | {gamename}')
-pygame.display.set_allow_screensaver(True)
-screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
 achs_to_show = (stg['window_size_y'] - header_h + 10) // 74
 if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
     achs_to_show -= 1
@@ -1054,32 +1044,49 @@ if stg['sound']:
     sounds[4] = load_sound(stg['sound_multi'])
     sounds[5] = load_sound(stg['sound_complete'])
 
-try:
-    with open(f'games/{appid}/achievements.json') as achsfile:
-        achs_json = json.load(achsfile)
-except FileNotFoundError:
-    achs_json = {}
+schema_as_config = os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+if schema_as_config:
+    with open(f'games/{appid}/UserGameStatsSchema_{appid}.bin', 'rb') as f:
+        data_from_schema = process_schema(appid, vdf.binary_loads(f.read()))
 
-achs_crc32 = {}
+achs_json = []
+if not schema_as_config:
+    if os.path.isfile(f'games/{appid}/achievements.json'):
+        with open(f'games/{appid}/achievements.json') as achsfile:
+            achs_json = json.load(achsfile)
+else:
+    achs_json = data_from_schema['achs']
+
+source_ach_ids = {}
+source_stat_ids = {}
+stl_ids_loaded = False
 if achdata_source == 'sse':
     for a in achs_json:
-        achs_crc32[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+        source_ach_ids[zlib.crc32(bytes(a['name'], 'utf-8'))] = a['name']
+elif achdata_source == 'steam_local':
+    if schema_as_config or os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')):
+        if not schema_as_config:
+            with open(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'), 'rb') as f:
+                data_from_schema = process_schema(appid, vdf.binary_loads(f.read()), ids_only=True)
+        source_ach_ids = data_from_schema['ach_ids']
+        source_stat_ids = data_from_schema['stat_ids']
+        stl_ids_loaded = True
 
 achieved_json = {}
 if achdata_source != 'steam':
     try:
         m = 'rt'
-        if achdata_source == 'sse':
+        if achdata_source in ('sse', 'steam_local'):
             m = 'rb'
         with open(get_player_achs_path(achdata_source, appid, source_extra), m) as player_achsfile:
             if achdata_source == 'goldberg':
                 achieved_json = json.load(player_achsfile)
-            elif achdata_source in ('codex', 'ali213'):
+            elif achdata_source == 'steam_local':
+                achieved_json = vdf.binary_loads(player_achsfile.read())
+                achieved_json = convert_achs_format(achieved_json, achdata_source, source_ach_ids)
+            else:
                 achieved_json = player_achsfile.read()
-                achieved_json = convert_achs_format(achieved_json, achdata_source)
-            elif achdata_source == 'sse':
-                achieved_json = player_achsfile.read()
-                achieved_json = convert_achs_format(achieved_json, achdata_source, achs_crc32)
+                achieved_json = convert_achs_format(achieved_json, achdata_source, source_ach_ids)
     except FileNotFoundError:
         pass
     except Exception as ex:
@@ -1091,12 +1098,11 @@ else:
         achieved_json = convert_achs_format(achieved_json, achdata_source)
 
 stats = {}
-stats_crc32 = {}
 increment_only_names = []
 increment_only = {}
 io_change = False
 
-if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.txt'):
+if not achdata_source in ('steam', 'steam_local') and os.path.isfile(f'games/{appid}/increment_only.txt'):
     with open(f'games/{appid}/increment_only.txt') as iofile:
         increment_only_names = iofile.read().split('\n')
     if os.path.isfile(f'{save_dir}/{appid}_inc_only.json'):
@@ -1104,40 +1110,43 @@ if achdata_source != 'steam' and os.path.isfile(f'games/{appid}/increment_only.t
             increment_only = json.load(iofile)
 
 stat_info = []
-stat_file_exists = False
-if os.path.isfile(f'games/{appid}/stats.txt'):
-    stat_file_exists = True
+if schema_as_config:
+    stat_info = data_from_schema['stats']
+    if stg['stat_display_names'] and len(stat_info) > 0 and len(stat_dnames) == 0:
+        stat_dnames = data_from_schema['stat_dnames']
+        with open(f'games/{appid}/statdisplay.json', 'w') as f:
+            json.dump(stat_dnames, f, indent=4)
+elif os.path.isfile(f'games/{appid}/stats.txt'):
     with open(f'games/{appid}/stats.txt') as f:
         statlines = f.read().split('\n')
     for line in statlines:
         stat_info.append(line.rsplit('=', 2))
 elif os.path.isfile(f'games/{appid}/stats.json'):
-    stat_file_exists = True
     with open(f'games/{appid}/stats.json') as f:
         statjson = json.load(f)
     for s in statjson:
         stat_info.append([s['name'], s['type'], s['default']])
-if stat_file_exists:
-    for linespl in stat_info:
-        if len(linespl) == 3:
-            locinfo = {'source': achdata_source, 'appid': appid, 'name': linespl[0]}
-            locinfo['source_extra'] = source_extra
-            if achdata_source == 'sse':
-                c = zlib.crc32(bytes(linespl[0], 'utf-8'))
-                stats_crc32[c] = linespl[0]
-            stats[linespl[0]] = Stat(locinfo, linespl[1], linespl[2], stg['delay_read_change'], stat_dnames, increment_only_names)
 
-            if stats[linespl[0]].inc_only:
-                if not linespl[0] in increment_only or (achdata_source == 'goldberg' and stats[linespl[0]].value > increment_only[linespl[0]]):
-                    increment_only[linespl[0]] = stats[linespl[0]].value
-                    io_change = True
-                elif stats[linespl[0]].value < increment_only[linespl[0]]:
-                    stats[linespl[0]].value = increment_only[linespl[0]]
+for stat_entry in stat_info:
+    if len(stat_entry) == 3:
+        locinfo = {'source': achdata_source, 'appid': appid, 'name': stat_entry[0]}
+        locinfo['source_extra'] = source_extra
+        if achdata_source == 'sse':
+            c = zlib.crc32(bytes(stat_entry[0], 'utf-8'))
+            source_stat_ids[c] = stat_entry[0]
+        stats[stat_entry[0]] = Stat(locinfo, stat_entry[1], stat_entry[2], stg['delay_read_change'], stat_dnames, increment_only_names)
+
+        if stats[stat_entry[0]].inc_only:
+            if not stat_entry[0] in increment_only or (achdata_source == 'goldberg' and stats[stat_entry[0]].value > increment_only[stat_entry[0]]):
+                increment_only[stat_entry[0]] = stats[stat_entry[0]].value
+                io_change = True
+            elif stats[stat_entry[0]].value < increment_only[stat_entry[0]]:
+                stats[stat_entry[0]].value = increment_only[stat_entry[0]]
 
 def load_stats():
     global stats_last_change, io_change
     m = 'rt'
-    if achdata_source == 'sse':
+    if achdata_source in ('sse', 'steam_local'):
         m = 'rb'
     statsdata = {}
     try:
@@ -1147,7 +1156,9 @@ def load_stats():
         stats_last_change = stamp
         with open(stats_path, m) as statsfile:
             statsdata = statsfile.read()
-        statsdata = convert_stats_format(stats, statsdata, achdata_source, stats_crc32)
+        if achdata_source == 'steam_local':
+            statsdata = vdf.binary_loads(statsdata)
+        statsdata = convert_stats_format(stats, statsdata, achdata_source, source_stat_ids)
     except FileNotFoundError:
         stats_last_change = None
     except Exception as ex:
@@ -1223,7 +1234,7 @@ if stg['save_timestamps']:
     except FileNotFoundError:
         pass
 
-config_from_fork = os.path.isdir(f'games/{appid}/img')
+config_from_fork = not schema_as_config and os.path.isdir(f'games/{appid}/img')
 icons_path = f'games/{appid}/achievement_images'
 if config_from_fork:
     icons_path = f'games/{appid}/img'
@@ -1239,16 +1250,11 @@ for i in range(len(achs)):
             achs[i].icon = achs[i].icon[4:]
         if achs[i].icon_gray != None and achs[i].icon_gray[:4] =='img/':
             achs[i].icon_gray = achs[i].icon_gray[4:]
-    if achs[i].icon != None and not achs[i].icon in ach_icons:
-        try:
-            ach_icons[achs[i].icon] = pygame.image.load(os.path.join(icons_path, achs[i].icon))
-        except pygame.error:
-            ach_icons[achs[i].icon] = None
-    if achs[i].icon_gray != None and not achs[i].icon_gray in ach_icons:
-        try:
-            ach_icons[achs[i].icon_gray] = pygame.image.load(os.path.join(icons_path, achs[i].icon_gray))
-        except pygame.error:
-            ach_icons[achs[i].icon_gray] = None
+
+    if achs[i].icon != None:
+        ach_icons[achs[i].icon] = None
+    if achs[i].icon_gray != None:
+        ach_icons[achs[i].icon_gray] = None
 
     languages_used.add(achs[i].language)
     languages_used.add(achs[i].language_d)
@@ -1328,12 +1334,64 @@ if os.path.isdir(save_dir) and isinstance(source_extra, str) and source_extra[:5
     with open(f'{save_dir}/path.txt', 'w') as pathfile:
         pathfile.write(source_extra[5:])
 
+missing_icons = []
 for i in ach_icons:
-    if ach_icons[i] == None: continue
+    if i.startswith('img/'):
+        os.makedirs(f'games/{appid}/img')
+        print('Config type wasn\'t detected correctly ("img" folder was missing), restart to download icons')
+        sys.exit()
+    if not os.path.isfile(os.path.join(icons_path, i)):
+        missing_icons.append(i)
+if len(missing_icons) > 0:
+    if not download_icons:
+        print('Icons not found:', len(missing_icons))
+        print('Press ENTER to download or write anything to ignore')
+        download_icons = input() == ''
+    if download_icons:
+        if not os.path.isdir(icons_path):
+            os.makedirs(icons_path)
+        base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
+                      'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
+        done = 0
+        total = len(missing_icons)
+        skipped = 0
+        skip_all = False
+        for i in missing_icons:
+            done += 1
+            print(f'[{done}/{total}] {i}')
+            while True:
+                success = False
+                for u in base_urls:
+                    url = u + appid + '/' + i
+                    try:
+                        urllib.request.urlretrieve(url, os.path.join(icons_path, i))
+                        success = True
+                        break
+                    except Exception as ex:
+                        pass
+                if success: break
+                print('Failed to download icon. ENTER - retry, "s" - skip, "end" - skip all')
+                inp = input()
+                if inp in ('s', 'end'):
+                    skipped += 1
+                    skip_all = inp == 'end'
+                    break
+            if skip_all:
+                skipped += total - done
+                break
+        finish_text = 'Finished downloading icons'
+        if skipped > 0: finish_text += f' ({skipped} skipped)'
+        print(finish_text)
+
+for i in ach_icons:
+    try:
+        ach_icons[i] = pygame.image.load(os.path.join(icons_path, i))
+    except (FileNotFoundError, pygame.error):
+        continue
     size = (ach_icons[i].get_width(), ach_icons[i].get_height())
     if size != (64, 64):
         if stg['smooth_scale']:
-            ach_icons[i] = pygame.transform.smoothscale(ach_icons[i].convert_alpha(), (64, 64))
+            ach_icons[i] = pygame.transform.smoothscale(ach_icons[i], (64, 64))
         else:
             ach_icons[i] = pygame.transform.scale(ach_icons[i], (64, 64))
 
@@ -1605,6 +1663,10 @@ def create_notification(t, change):
 
         send_notification(title, message, icon)
 
+pygame.display.set_caption(f'Achievements | {gamename}')
+pygame.display.set_allow_screensaver(True)
+screen = pygame.display.set_mode((stg['window_size_x'], stg['window_size_y']))
+
 if len(ach_percentages) > 0 and len(ach_idxs) > 0 and set(ach_percentages) != set(ach_idxs):
     t = datetime.now().strftime(stg['strftime'])
     ch = {'time_real': t, 'time_action': t}
@@ -1626,6 +1688,17 @@ while running:
         if update_time:
             last_update = time.time()
 
+        if achdata_source == 'steam_local' and not stl_ids_loaded:
+            if os.path.isfile(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin')):
+                with open(os.path.join(get_steam_path(), f'appcache/stats/UserGameStatsSchema_{appid}.bin'), 'rb') as f:
+                    data_from_schema = process_schema(appid, vdf.binary_loads(f.read()), ids_only=True)
+                source_ach_ids = data_from_schema['ach_ids']
+                source_stat_ids = data_from_schema['stat_ids']
+                stl_ids_loaded = True
+                fchecker_achieved.last_check = None
+                stats_last_change = -1.0
+                stats_delay_counter = stg['delay_stats']
+
         if achdata_source != 'steam':
             changed, newdata = fchecker_achieved.check()
             stats_delay_counter += 1
@@ -1637,7 +1710,7 @@ while running:
             stats_changed = False
             if steam_requests_state['stats'] == 1:
                 if 'stats' in steam_requests_data['stats']['playerstats']:
-                    stats_changed = 'stats' in steam_requests_data['stats']['playerstats']
+                    stats_changed = True
                     stat_response = steam_requests_data['stats']
                 steam_requests_state['stats'] = 2
 
@@ -1657,7 +1730,7 @@ while running:
         if changed:
 
             if achdata_source != 'goldberg' and newdata != None:
-                newdata = convert_achs_format(newdata, achdata_source, achs_crc32)
+                newdata = convert_achs_format(newdata, achdata_source, source_ach_ids)
 
             achs, changes = update_achs(achs, newdata, fchecker_achieved, stg)
 
@@ -1841,9 +1914,10 @@ while running:
                     filter_needed = True
                 elif event.key == pygame.K_BACKSPACE:
                     search_request = search_request[:-1]
-                elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
-                        search_request += pyperclip.paste()
+                        search_request = ''
+                elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    search_request += pyperclip.paste()
                 else:
                     search_request += event.unicode
                 flip_required = True
@@ -1949,7 +2023,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.5.2')
+                print(' - Version: v1.6.0')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -2267,8 +2341,8 @@ while running:
                 achs_f = results
         else:
             fake_stg = {'unlockrates': 'none', 'secrets': 'normal',
-                'unlocks_on_top': False, 'unlocks_timesort': True,
-                'savetime_shown': stg['savetime_shown']}
+                        'unlocks_on_top': False, 'unlocks_timesort': True,
+                        'savetime_shown': stg['savetime_shown']}
             achs_f = filter_achs(achs, 1, fake_stg)
         filter_needed = False
 

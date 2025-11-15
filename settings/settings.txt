@@ -101,4 +101,5 @@ savetime_overwrite_locked=0
 smooth_scale=1
 stat_display_names=1
 generator_path=
+generator_priority=1
 api_key=

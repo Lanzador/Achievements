@@ -15,7 +15,7 @@ class Stat:
         if fileinfo['source'] == 'goldberg':
             self.fchecker = FileChecker('stat', fileinfo, sleep_t)
             self.update_val(True)
-        elif fileinfo['source'] == 'steam' and s_type == 'avgrate':
+        elif fileinfo['source'] in ('steam', 'steam_local') and s_type == 'avgrate':
             self.type = 'avgrate_st'
 
         self.dname = self.name
@@ -49,14 +49,14 @@ class Stat:
         else:
             return float(v)
 
-def convert_stats_format(stats, data, source, stats_crc32=None):
+def convert_stats_format(stats, data, source, source_stat_ids=None):
     try:
         conv = {}
         if source == 'codex':
             for l in data.split('\n'):
-                spl = l.split('=')
+                spl = l.rsplit('=', 1)
                 if len(spl) > 1:
-                    stat = '='.join(spl[:-1])
+                    stat = spl[0]
                     if stat in stats:
                         stat = stats[stat]
                         conv[stat.name] = stat.to_stat_type(spl[1])
@@ -78,12 +78,23 @@ def convert_stats_format(stats, data, source, stats_crc32=None):
             for i in range(struct.unpack('i', data[:4])[0]):
                 e = data[4 + 24 * i : 28 + 24 * i]
                 c = struct.unpack('I', e[0:4])[0]
-                if c in stats_crc32:
-                    stat = stats[stats_crc32[c]]
+                if c in source_stat_ids:
+                    stat = stats[source_stat_ids[c]]
                     if stat.type == 'int':
                         conv[stat.name] = struct.unpack('i', e[20:24])[0]
                     else:
                         conv[stat.name] = struct.unpack('f', e[20:24])[0]
+        elif source == 'steam_local':
+            data = data['cache']
+            for stat_id in source_stat_ids:
+                if not stat_id in data: continue
+                name = source_stat_ids[stat_id]
+                if name in stats:
+                    stat = stats[name]
+                    if stat.type == 'int':
+                        conv[name] = data[stat_id]['data']
+                    else:
+                        conv[name] = struct.unpack('>f', struct.pack('>i', data[stat_id]['data']))[0]
         return conv
     except Exception as ex:
         print(f'Failed to convert stats - {type(ex).__name__}')

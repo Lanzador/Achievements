@@ -37,7 +37,8 @@ def source_name(source):
                     'codex': ('c', 'cd', 'cod', 'cdx', 'codex'),
                     'ali213': ('a', 'ali', 'ali213', '213', 'a213'),
                     'sse': ('s', 'sse', 'smartsteamemu', 'smart'),
-                    'steam': ('st', 'steam')}
+                    'steam': ('st', 'steam'),
+                    'steam_local': ('stl', 'steaml', 'steam_local')}
     for s in known_values:
         if source in known_values[s]:
             return s
@@ -52,7 +53,7 @@ def get_save_dir(appid, source, extra):
     elif source in ('ali213', 'sse'):
         if extra != None and (not extra[:5] == 'path:'):
             d += f'/{extra}'
-    elif source == 'steam':
+    elif source in ('steam', 'steam_local'):
         d += f'/{extra}'
     if source in ('goldberg', 'ali213', 'sse') and extra != None and (extra[:5] == 'path:'):
         path = os.path.abspath(extra[5:]).replace('\\', '/')
@@ -68,7 +69,8 @@ def load_emulator_defaults():
                 'codex': None,
                 'ali213': None,
                 'sse': None,
-                'steam': None}
+                'steam': None,
+                'steam_local': None}
     if os.path.isfile('games/defaults.txt'):
         with open('games/defaults.txt') as f:
             txt = f.read().split('\n')
@@ -129,11 +131,13 @@ def load_game(inp, from_args=False):
     elif inp[1] == 'ali213':
         if inp[2] == None:
             inp[2] = 'Player'
-    elif inp[1] == 'steam':
+    elif inp[1] in ('steam', 'steam_local'):
         inp[2] = check_alias(inp[2])
         if inp[2] == None or not inp[2].isnumeric():
             print('Invalid Steam user ID')
             sys.exit()
+        if inp[1] == 'steam_local' and int(inp[2]) >= 2 ** 32:
+            inp[2] = str(int(inp[2]) & (2 ** 32 - 1))
 
     return inp
 
@@ -240,6 +244,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'smooth_scale': {'type': 'bool', 'default': True},
                   'stat_display_names': {'type': 'bool', 'default': True},
                   'generator_path': {'type': 'str', 'default': ''},
+                  'generator_priority': {'type': 'bool', 'default': True},
                   'api_key': {'type': 'str', 'default': ''}}
 
 def load_settings(appid, source, ach_dumper=False):

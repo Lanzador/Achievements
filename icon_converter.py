@@ -3,6 +3,7 @@ import sys
 import json
 import time
 from PIL import Image
+import vdf
 
 silent = '-s' in sys.argv
 check = '-c' in sys.argv
@@ -16,11 +17,14 @@ else:
 
 t = time.time()
 
+def app_has_config(appid):
+    return os.path.isfile(f'games/{appid}/achievements.json') or os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+
 folderless = set()
 if '*' in appids:
     appids = set()
     for f in os.scandir('games'):
-        if f.is_dir() and f.name.isnumeric() and os.path.isfile(f'games/{f.name}/achievements.json'):
+        if f.is_dir() and f.name.isnumeric() and app_has_config(f.name):
             appids.add(f.name)
 else:
     alias = []
@@ -40,7 +44,7 @@ else:
     numeric = set()
     for appid in appids:
         if appid.isnumeric():
-            if os.path.isfile(f'games/{appid}/achievements.json'):
+            if app_has_config(appid):
                 numeric.add(appid)
             else:
                 folderless.add(appid)
@@ -51,7 +55,8 @@ total_conv = 0
 errors = {}
 check_result = []
 for appid in appids:
-    config_from_fork = os.path.isdir(f'games/{appid}/img')
+    schema_as_config = os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+    config_from_fork = not schema_as_config and os.path.isdir(f'games/{appid}/img')
     icons_path = f'games/{appid}/achievement_images'
     if config_from_fork:
         icons_path = f'games/{appid}/img'
@@ -62,8 +67,27 @@ for appid in appids:
             check_result.append(appid)
         continue
 
-    with open(f'games/{appid}/achievements.json') as achsfile:
-        achs = json.load(achsfile)
+    if not schema_as_config:
+        with open(f'games/{appid}/achievements.json') as achsfile:
+            achs = json.load(achsfile)
+    else:
+        with open(f'games/{appid}/UserGameStatsSchema_{appid}.bin', 'rb') as f:
+            data = vdf.binary_loads(f.read())
+        achs = []
+        for s in data[appid]['stats'].values():
+            if s['type'] == '4':
+                for b in s['bits'].values():
+                    ach = {}
+                    if 'hidden' in b['display']: ach['hidden'] = b['display']['hidden']
+                    elif 'Hidden' in b['display']: ach['hidden'] = b['display']['Hidden']
+                    else: ach['hidden'] = '0'
+                    ach['displayName'] = b['display']['name']
+                    ach['description'] = b['display']['desc']
+                    ach['icon'] = b['display']['icon']
+                    if 'icon_gray' in b['display']: ach['icon_gray'] = b['display']['icon_gray']
+                    ach['name'] = b['name']
+                    if 'progress' in b: ach['progress'] = b['progress']
+                    achs.append(ach)
 
     icons = set()
     for ach in achs:

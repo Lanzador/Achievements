@@ -1,3 +1,14 @@
+## v1.6.0
+- Added `steam_local` (`stl`): an alternative way of tracking achievements from Steam profiles that relies on local files instead of Steam Web API
+- Can now use Steam's UserGameStatsSchema file as config. The file can be automatically copied from Steam's folder.
+- Allow viewing achievements when some icons are missing; make missing icon download functionality always available (instead of only after an interrupted config generation)
+- `bar_percentage` now affects progress bars in history.
+- The window now opens after everything is loaded instead of showing a black screen during load
+- Print last unlock rates update time if update fails
+- Allow `Ctrl+Backspace` in search
+- [ach_dumper] Respect `show_timestamps`
+- [ach_dumper] Fix lack of `stats.json` support in `.py` version
+
 ## v1.5.2
 - Fix non-experimental version crashing when achievement progress changes if no unlock rates are loaded
 
