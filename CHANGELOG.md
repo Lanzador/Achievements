@@ -1,4 +1,4 @@
-## v1.6.0
+## v1.6.0e1
 - Comparison features for loading and viewing friends' progress
 - Added `generate_inc_only()`
 - Added `invset()`
