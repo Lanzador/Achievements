@@ -1,3 +1,14 @@
+## v1.7.0
+- Fix schemas being treated as empty because of changes to file format
+- Automatically apply `bar_ignore_min` behavior to achievements where min_val = max_val
+- Fix `*` in `force_progress.txt` duplicating previously added achievements and allow `*:-`
+- Use `real_value` instead of `current_value` for `force_progress`
+- [Internal ach_dumper] Fix crash because of achievements without description on history screen
+- [Internal ach_dumper] Improve unlock rates handling
+- [Internal ach_dumper] Fix using `stg` instead of `stg_ad` for `secrets_listhide` in internal ach_dumper
+- [save_finder_all] Replaced no longer functional `ISteamApps/GetAppList` with `IStoreService/GetAppList` for getting app names. More stable, but requires an API key
+- [save_finder_all] Fix error status code printing
+
 ## v1.6.0
 - Added `steam_local` (`stl`): an alternative way of tracking achievements from Steam profiles that relies on local files instead of Steam Web API
 - Can now use Steam's UserGameStatsSchema file as config. The file can be automatically copied from Steam's folder.

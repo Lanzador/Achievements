@@ -315,7 +315,7 @@ def draw_achs():
                     prg_no_min = achs_f[i].progress.get_without_min()
                     if prg_no_min[1] == 0:
                         prg_no_min = (0, 1)
-                    if stg['bar_ignore_min']:
+                    if stg['bar_ignore_min'] or achs_f[i].progress.min_val == achs_f[i].progress.max_val:
                         prg_val = achs_f[i].progress.real_value
                         prg_no_min = (prg_val, achs_f[i].progress.max_val)
                 else:
@@ -629,7 +629,7 @@ def ach_dumper():
 
             can_show_desc = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets
 
-            if stg['secrets_listhide'] and not can_show_desc:
+            if stg_ad['secrets_listhide'] and not can_show_desc:
                 text += '\n\n' + stg_ad['hidden_title']
             else:
                 text += '\n\n' + a.display_name_np
@@ -671,13 +671,19 @@ def ach_dumper():
                 text += '\n\nAchievement list has changed'
                 text += '\nSome achievements were added or removed on Steam'
             else:
+                text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_np
                 if h['type'] == 'progress_report':
-                    text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_np
                     text += f" ({h['value'][0]}/{h['value'][1]})"
-                else:
-                    text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_l
+                elif stg_ad['unlockrates'] == 'name':
+                    text += a.rarity_text
                 if not h['ach'].hidden or (h['type'] == 'unlock' and not hide_all_secrets) or reveal_secrets:
-                    text += '\n' + h['ach'].description_l
+                    if h['ach'].has_desc:
+                        d = h['ach'].description_l
+                        if stg['unlockrates'] == 'desc' and h['ach'].rarity != -1.0:
+                            d = d[: -len(h['ach'].rarity_text)]
+                        if stg_ad['unlockrates'] == 'desc' and h['ach'].rarity != 1.0:
+                            d += h['ach'].rarity_text
+                        text += '\n' + d
                 elif len(stg_ad['hidden_desc']) > 0:
                     text += '\n' + stg_ad['hidden_desc']
             text += '\n[' + h['time_' + stg['history_time']] + ']'
@@ -1494,6 +1500,9 @@ if os.path.isfile(f'games/{appid}/force_progress.txt'):
                 continue
         n = x[0]
         if n == '*':
+            force_progress.clear()
+            if rem:
+                continue
             for a in achs:
                 if a.progress != None and a.progress.support:
                     st = a.progress.value['operand1']
@@ -1792,19 +1801,19 @@ while running:
                 flip_required = True
                 for ach in achs:
                     if ach.progress != None and ach.progress.support:
-                        old = ach.progress.current_value
+                        old = ach.progress.real_value
                         ach.progress.calculate(stats)
 
-                        if ach.progress.value['operand1'] in force_progress and ach.progress.current_value > old and not ach.earned:
+                        if ach.progress.value['operand1'] in force_progress and ach.progress.real_value > old and not ach.earned:
                             for achf in force_progress[ach.progress.value['operand1']]:
-                                if ach.progress.current_value >= achf['max']:
+                                if ach.progress.real_value >= achf['max']:
                                     if old < achf['max']:
                                         break
                                     continue
                                 if achf['ach'] != ach.name:
                                     break
-                                if achf['step'] == 0 or (ach.progress.current_value // achf['step'] > old // achf['step']):
-                                    v = ach.progress.current_value
+                                if achf['step'] == 0 or (ach.progress.real_value // achf['step'] > old // achf['step']):
+                                    v = ach.progress.real_value
                                     if achf['round']:
                                         whole = isinstance(v, int)
                                         v = v // achf['step'] * achf['step']
@@ -2023,7 +2032,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.6.0')
+                print(' - Version: v1.7.0')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

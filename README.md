@@ -183,6 +183,8 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `ctrl_click` - if enabled, holding Ctrl while clicking an achievement will let you choose a language through console input and print the achievement's name and description in that language. Default: `false`
 
+`hidden_title` - replacement title to show for locked hidden achievements when `secrets_listhide` is enabled. Default: `??????????`
+
 `hidden_desc` - replacement description to show for locked hidden achievements. Default: `[Hidden achievement]`
 
 `secrets` - hidden achievements. `normal` - show without descriptions; `hide` - remove from the list, like on Steam (default); `bottom` - move to the bottom of the list.
@@ -209,7 +211,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `bar_hide_secret` - hide progressbar if the achievement is hidden and not earned. Default: `true`
 
-`bar_ignore_min` - assume that achievement progress `min_val` is always `0`. Fixes progressbars in some games. Default: `false`
+`bar_ignore_min` - assume that achievement progress `min_val` is always `0`. Fixes progressbars in some games. This behavior is automatically applied to such broken bars since `v1.7.0`. Default: `false`
 
 `bar_percentage` - show achievement progress as a percentage. `no` - don't show (default); `show` - show next to normal values; `only` - show instead of normal values.
 
@@ -343,7 +345,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `smooth_scale` - use `pygame.transform.smoothscale` instead of `pygame.transform.scale` to resize achievement icons when needed. Default: `true`
 
-`stat_display_names` - load and show display names instead of API names for stats. Requires an API key. Default: `true`
+`stat_display_names` - load and show display names instead of API names for stats. Requires an API key or using a schema file as config. Default: `true`
 
 `generator_path` - path to `generate_emu_config` (`.py` or executable). If set, config generation will be started automatically for all new games. Default: Empty
 
@@ -431,7 +433,7 @@ A list of emulators (with usernames, where applicable) will be printed. If nothi
 ### save_finder_all
 Run this to find all supported non-`path:` saves on your PC.
 
-If possible, game names will be printed next to AppIDs. Sometimes not all names are retrieved for some reason, so if too many IDs are left without a name, try running this again.
+If possible, game names will be printed next to AppIDs. This requires an API key. If the key is not found in `settings.txt` (`add_file=` files are ignored), you can enter it interactively.
 
 Accepted arguments:
 
