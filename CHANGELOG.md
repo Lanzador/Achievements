@@ -1,3 +1,12 @@
+## v1.7.0e1
+- SteamSync: a feature to copy local unlocks and stat changes to Steam as soon as they're detected
+- `cmp_dump()`: add `ret` argument and fix error when using auto-generated `ach_dumper/...` filename
+- Added `cmp_self()`
+- New `edit()` value (`force_progress.txt`)
+- `ch_lang()`: add default value and change format from `['1', '2']` to `'1,2'` (like in `settings.txt`)
+- `Ctrl+E` try-except can be disabled by using `Ctrl+Alt+E`
+- A few other minor changes/fixes
+
 ## v1.6.0e1
 - Comparison features for loading and viewing friends' progress
 - Added `generate_inc_only()`

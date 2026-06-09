@@ -362,7 +362,7 @@ def convert_achs_format(data, source, source_ach_ids=None):
                 for bit in source_ach_ids[group]:
                     achname = source_ach_ids[group][bit]
                     conv[achname] = {}
-                    conv[achname]['earned'] = data[group]['data'] & 2 ** bit
+                    conv[achname]['earned'] = data[group]['data'] & 2 ** int(bit)
                     conv[achname]['earned_time'] = 0.0
                     if 'AchievementTimes' in data[group] and str(bit) in data[group]['AchievementTimes']:
                         conv[achname]['earned_time'] = float(data[group]['AchievementTimes'][str(bit)])
@@ -379,11 +379,13 @@ def process_schema(appid, data, ids_only=False):
            'ach_ids': {},
            'stat_ids': {}}
 
-    stat_types = {'1': 'int', '2': 'float', '3': 'avgrate'}
+    stat_types = {'1': 'int', '2': 'float', '3': 'avgrate',
+                  'INT': 'int', 'FLOAT': 'float', 'AVGRATE': 'avgrate'}
 
-    for s in data[appid]['stats'].values():
+    for s_key in data[appid]['stats']:
+        s = data[appid]['stats'][s_key]
         if s['type'] in stat_types:
-            out['stat_ids'][s['id']] = s['name']
+            out['stat_ids'][s_key] = s['name']
             if ids_only: continue
 
             default = None
@@ -401,10 +403,11 @@ def process_schema(appid, data, ids_only=False):
             out['stats'].append([s['name'], stat_types[s['type']], default])
             out['stat_dnames'][s['name']] = s['display']['name']
             if int(s.get('incrementonly', 0)) == 1: out['stats_io'].append(s['name'])
-        elif s['type'] == '4':
+        elif s['type'] == '4' or s['type'] == 'ACHIEVEMENTS':
             id_dict = {}
-            for b in s['bits'].values():
-                id_dict[b['bit']] = b['name']
+            for b_key in s['bits']:
+                b = s['bits'][b_key]
+                id_dict[b_key] = b['name']
                 if ids_only: continue
                 ach = {}
                 if 'hidden' in b['display']: ach['hidden'] = b['display']['hidden']
@@ -417,6 +420,6 @@ def process_schema(appid, data, ids_only=False):
                 ach['name'] = b['name']
                 if 'progress' in b: ach['progress'] = b['progress']
                 out['achs'].append(ach)
-            out['ach_ids'][s['id']] = id_dict
-            
+            out['ach_ids'][s_key] = id_dict
+
     return out

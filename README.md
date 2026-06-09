@@ -17,6 +17,10 @@ If the program is used without console, input will be requested in the GUI windo
 
 - `Ctrl+Shift+E` - repeat last executed code.
 
+- `Ctrl+Alt+E` - execute without try-except.
+
+- If reordering `achs`, make sure to regenerate `ach_idxs` to avoid unexpected behavior when saving timestamps and in other cases.
+
 `Ctrl+R` - reload data such as settings without restarting the program and losing its current state.
 
 - `Ctrl+Shift+R` - instead of loading files, just correctly apply changes made to `stg` and some other achievement-related variables through `Ctrl+E`. Doesn't work for most stat-related things.
@@ -26,6 +30,8 @@ If the program is used without console, input will be requested in the GUI windo
 `Ctrl+G` - toggle grid view.
 
 `Ctrl+C` - open comparison menu (see below).
+
+`Ctrl+S` - open SteamSync menu (see below).
 
 ## Comparison
 You can use the comparison menu to load your friends' progress from Steam (or from a file) for comparison purposes.
@@ -51,7 +57,7 @@ Enter an empty target name to stop batch-adding targets.
 
 If a target wasn't actually added, check the console to see the error.
 
-- Error code 403 indicates a problem with the target's privacy settings.
+- Error code 403 indicates a problem with the target's privacy settings (or your API key).
 
 - Error code 400 is returned if the target doesn't own the game.
 
@@ -80,6 +86,52 @@ The following filter conditions are valid:
 Conditions can be joined using `|` (OR, highest priority), `&` (AND), `+` (OR, lowest priority).
 
 Example: `<2|!Targ1&Targ2+>10`
+
+## SteamSync
+When this feature is enabled, new local unlocks and stat changes from a Steam emulator are copied to Steam.
+
+This was added for re-unlocking achievements (which are already unlocked on Steam) locally while still saving first-time unlocks to Steam.
+
+Requires `steam_api.dll` or `steam_api64.dll` next to `.exe`/`.py`. DLL bitness must match bitness of executable (recent public releases are 64-bit) or Python installation (if running `.py`). Use the DLL from [Steamwords SDK](https://partner.steamgames.com/downloads/list) v1.64, other versions are not guaranteed to work.
+
+All stats are synced whenever any stat changes or an achievement is unlocked. Achievements unlocked while SteamSync is disabled are not automatically synced.
+
+Press `A` in SteamSync menu (while it's active) to sync achievements unlocked locally before SteamSync was enabled. Also syncs stats.
+
+Press `S` to sync stats. Unlike automatically triggered updates, the changes are immediately stored.
+
+For automatic stat updates, `StoreStats` is only called if at least `exp_ssync_store_delay` (default: 3 minutes) have passed since last call. If it's too early, stats will be stored once the timer expires. Steam stores everything once you stop playig no matter how much time has passed since last call.
+
+Since Steam sees this program as the game's process when using SteamSync, don't forget to close it to avoid extra playtime.
+
+Run the game from Steam before enabling SteamSync (which leads to Steam replacing the PLAY button with STOP) for the overlay to attach to the game.
+
+### SteamSync Reverse
+When tracking `steam_local`, SteamSync will not write anything to Steam. Instead, it will be used to read stats without significant delays through "get stat" calls.
+
+Tracked Steam ID must match the account actually logged into Steam, else you will see an error message.
+
+### Stat modes
+By default, stats are only synced if their local value is greater than the Steam value. Create `games/[AppID]/ssync_stats.txt` to configure this behavior.
+
+Format example:
+
+```
+not *
+inc Stat1_APIname
+any Stat2_APIname
+bit Stat3_APIname
+```
+
+`*` affects all stats (except those listed explicitly).
+
+`inc` - sync if local value is greater (default).
+
+`any` - always write local value to Steam, even if it's smaller.
+
+`not` - never sync this stat.
+
+`bit` - write the bitwise OR of the Steam value and the local value to Steam. Some games use stats to track which parts of an achievement's requirement were completed, using one bit per part. For example, if an achievement requires finding all chests, each bit can represent a specific chest.
 
 ## Settings
 There are some settings exclusive to this version.
@@ -124,10 +176,18 @@ There are some settings exclusive to this version.
 
 `exp_cmp_color_bar_best` - color used to show the highest comparison target's progress on the game completion progress bar. Default: `160,160,160`
 
+`exp_ssync_store_delay` - minimal amount of time between automatic `StoreStats` calls. Setting this to very small values is pointless, since Steam ignores excessive calls. Default: `180s`
+
+`exp_ssync_progress` - copy achievement progress notifications to Steam. Can be temporarily changed without affecting `settings.txt` in SteamSync menu. Default: `true`
+
+`exp_ssync_progress_io` - only copy progress notifications if reported progress is not less than the stat value from Steam. Shouldn't be enabled if using `:r` in `force_progress.txt`. Even if this setting is disabled, Steam will not show the actual reported values if they're less than the stat's value. Default: `false`
+
 ## Functions
 These functions can be used through `Ctrl+E`.
 
-`cmp_dump(fn=None)` - write current unlocks and stats to file `fn` which can be used to load them when adding a comparison target. If `fn` is not set, input will be requested. Keep the input empty to use ach_dumper's folder.
+`cmp_dump(fn=None, ret=False)` - write current unlocks and stats to file `fn` which can be used to load them when adding a comparison target. If `fn` is not set, input will be requested. Keep the input empty to use ach_dumper's folder. If `ret=True`, returns the result instead of writing it to a file.
+
+`cmp_self(name='Self')` - add comparison target with current progress.
 
 `find_a(ach)` - returns achievement object based on API name or index (internal order, not sorted order).
 
@@ -161,11 +221,13 @@ These functions can be used through `Ctrl+E`.
 
 - `n=10`, `n='st'` - `Steam/appcache/stats`
 
+- `n=11`, `n='fp'` - `force_progress.txt` (will be created if doesn't exist)
+
 `defset()` - set default settings.
 
 `invset(x, vals=None)` - without `vals`, inverts the value of a boolean setting named `x`. With `vals=[val1, val2]`, alternates between the given values of any type on each use. `vals=[val1]` is equivalent to `vals=[val1, known_settings[x]['default']]`.
 
-`ch_lang(l)` - change language. `l` is a string or list of strings.
+`ch_lang(l='')` - change language. `l` is a string, same format (`language1,language2`) as in `settings.txt`.
 
 `list_langs(a=None)` - print achievement name and description in all available languages. `a` is an achievement object, API name or index. If `a` is `None`, it is set to `get_hover()`.
 

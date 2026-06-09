@@ -123,3 +123,6 @@ exp_cmp_expire=1h
 exp_cmp_autoload_global=1
 exp_cmp_color_bar_next=192,192,192
 exp_cmp_color_bar_best=160,160,160
+exp_ssync_store_delay=180s
+exp_ssync_progress=1
+exp_ssync_progress_io=0

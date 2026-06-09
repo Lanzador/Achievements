@@ -77,20 +77,48 @@ scan_for_appids(p, 'ALi213')
 p = os.path.join(os.environ['APPDATA'], 'SmartSteamEmu')
 scan_for_appids(p, 'SmartSteamEmu')
 
+api_key = ''
+if os.path.isfile('settings/settings.txt'):
+    with open('settings/settings.txt') as f:
+        stg = f.read().split('\n')
+        for s in stg:
+            if s.startswith('api_key='):
+                api_key = s[8:]
+if api_key == '':
+    print('Steam Web API key not found in settings.txt (only required to display app names)')
+    api_key = input('API key: ')
+    print()
+    if api_key == '':
+        print('[!] Failed to download app names (No API key)')
+
 app_names = {}
-try:
-    app_list = requests.get('https://api.steampowered.com/ISteamApps/GetAppList/v2')
-    if int(app_list.status_code / 100) != 4:
-        app_list = app_list.json()['applist']['apps']
-        for app in app_list:
-            if str(app['appid']) in appids:
-                app_names[str(app['appid'])] = app['name']
-    else:
-        print(f' ! Failed to download app names ({r.status_code})')
-except requests.exceptions.ConnectionError:
-    print('[!] Failed to download app names (Connection error)')
-except Exception as ex:
-    print(f'[!] Failed to download app names ({type(ex).__name__})')
+have_more_results = api_key != ''
+last_appid = 0
+max_appid = max(map(int, appids))
+while have_more_results:
+    try:
+        app_list = requests.get(f'https://api.steampowered.com/IStoreService/GetAppList/v1?key={api_key}&max_results=50000&last_appid={last_appid}')
+        if int(app_list.status_code / 100) != 4:
+            print(f'Downloading app names... (Last AppID: {last_appid})')
+            app_list = app_list.json()['response']
+            have_more_results = app_list.get('have_more_results', False)
+            if have_more_results:
+                last_appid = app_list['last_appid']
+                if last_appid >= max_appid:
+                    break
+            for app in app_list['apps']:
+                if str(app['appid']) in appids:
+                    app_names[str(app['appid'])] = app['name']
+        else:
+            print(f'[!] Failed to download app names ({app_list.status_code})')
+            break
+    except requests.exceptions.ConnectionError:
+        print('[!] Failed to download app names (Connection error)')
+        break
+    except Exception as ex:
+        print(f'[!] Failed to download app names ({type(ex).__name__})')
+        break
+print()
 
 def get_name_str(appid):
     name_str = appid

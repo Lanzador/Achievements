@@ -75,7 +75,7 @@ for appid in appids:
             data = vdf.binary_loads(f.read())
         achs = []
         for s in data[appid]['stats'].values():
-            if s['type'] == '4':
+            if s['type'] == '4' or s['type'] == 'ACHIEVEMENTS':
                 for b in s['bits'].values():
                     ach = {}
                     if 'hidden' in b['display']: ach['hidden'] = b['display']['hidden']

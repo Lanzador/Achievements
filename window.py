@@ -107,7 +107,6 @@ def draw_console():
 def draw_console_line():
     screen.fill(stg['color_background'])
     dt = datetime.fromtimestamp(viewing_line['time'])
-    dt.strftime(stg['strftime'])
     info = f"Line #{viewing_line_num} | Time: {viewing_line['time']} ({dt.strftime(stg['strftime'])})"
     show_text(screen, font_general, info, (0, 0), stg['color_text'])
     multiline_text(screen, 99999, stg['font_line_distance_regular'], stg['window_size_x'], font_general, viewing_line['text'], (0, stg['font_line_distance_regular']), stg['color_text'])
@@ -232,6 +231,304 @@ def draw_cmp_save_menu():
             show_text(screen, font_general, text, (0, stg['font_line_distance_regular'] * position), stg['color_text'])
 
     pygame.display.flip()
+
+def draw_steamsync_menu():
+    screen.fill(stg['color_background'])
+
+    if not ssync_connected:
+        show_text(screen, font_general, 'SteamSync is not connected', (0, 0), stg['color_text'])
+        if not ssync_dll_found:
+            show_text(screen, font_general, 'Steam API library not found', (0, stg['font_line_distance_regular']), stg['color_text'])
+        elif not ssync_dll_loaded:
+            show_text(screen, font_general, "Steam API library couldn't be loaded", (0, stg['font_line_distance_regular']), stg['color_text'])
+        elif not ssync_dll_funcs_ok:
+            show_text(screen, font_general, 'Failed to access required functions', (0, stg['font_line_distance_regular']), stg['color_text'])
+            show_text(screen, font_general, 'Your Steam API version is probably not supported', (0, 2 * stg['font_line_distance_regular']), stg['color_text'])
+        else:
+            show_text(screen, font_general, 'ENTER - connect to Steam', (0, stg['font_line_distance_regular']), stg['color_text'])
+            if ssync_conn_att:
+                show_text(screen, font_general, 'Failed to connect. Make sure Steam is running and you own the game', (0, 2 * stg['font_line_distance_regular']), stg['color_text'])
+            if achdata_source == 'steam_local':
+                show_text(screen, font_general, 'Since you are tracking steam_local, SteamSync has a different purpose.', (0, 3 * stg['font_line_distance_regular']), stg['color_text'])
+                show_text(screen, font_general, 'Once connected to Steam, it will be used to update stat values.', (0, 4 * stg['font_line_distance_regular']), stg['color_text'])
+                show_text(screen, font_general, 'Only achievements will be read from the UserGameStats file.', (0, 5 * stg['font_line_distance_regular']), stg['color_text'])
+    elif achdata_source == 'steam_local':
+        if str(ssync_steamid & (2 ** 32 - 1)) == source_extra:
+            show_text(screen, font_general, 'SteamSync Reverse is active', (0, 0), stg['color_text'])
+        else:
+            show_text(screen, font_general, 'Steam ID does not match current tracking target', (0, 0), stg['color_text'])
+        show_text(screen, font_general, 'P - copy achievement progress notifications to Steam: ' + str(stg['exp_ssync_progress']), (0, 2 * stg['font_line_distance_regular']), stg['color_text'])
+    else:
+        t = 'SteamSync is active (SPACE to control)' if ssync_active else \
+            'SteamSync is paused (SPACE to control)'
+        show_text(screen, font_general, t, (0, 0), stg['color_text'])
+        show_text(screen, font_general, f'Local: {achs_unlocked}/{len(achs)} | Steam: {ssync_steam_unlocks}/{len(achs)}', (0, stg['font_line_distance_regular']), stg['color_text'])
+        strftime_last_store = datetime.fromtimestamp(ssync_last_store).strftime(stg['strftime']) if ssync_last_store != 0 else '---'
+        strftime_last_copy_stats = datetime.fromtimestamp(ssync_last_copy_stats).strftime(stg['strftime']) if ssync_last_copy_stats != 0 else '---'
+        show_text(screen, font_general, f'Last store: {strftime_last_store} | Last stats sync: {strftime_last_copy_stats}', (0, 2 * stg['font_line_distance_regular']), stg['color_text'])
+        c = stg['color_text'] if ssync_active and ssync_resyncable_unlocks > 0 else stg['color_text_lock']
+        show_text(screen, font_general, f'A - resync unlocked achievements ({ssync_resyncable_unlocks})', (0, 4 * stg['font_line_distance_regular']), c)
+        c = stg['color_text'] if ssync_active and ssync_resyncable_stats > 0 else stg['color_text_lock']
+        show_text(screen, font_general, f'S - update stats ({ssync_resyncable_stats})', (0, 5 * stg['font_line_distance_regular']), c)
+        c = stg['color_text'] if ssync_active else stg['color_text_lock']
+        show_text(screen, font_general, 'P - copy achievement progress notifications to Steam: ' + str(stg['exp_ssync_progress']), (0, 6 * stg['font_line_distance_regular']), c)
+
+
+    pygame.display.flip()
+
+def ssync_load_dll():
+    import ctypes
+    global ssync_dll, ssync_dll_found, ssync_dll_loaded, ssync_dll_funcs_ok
+
+    if ssync_dll_loaded: return
+
+    if os.path.isfile('steam_api64.dll'):
+        filename = 'steam_api64.dll'
+    elif os.path.isfile('steam_api.dll'):
+        filename = 'steam_api.dll'
+    elif os.path.isfile('libsteam_api.so'):
+        filename = 'libsteam_api.so'
+    else:
+        return
+    ssync_dll_found = True
+
+    try:
+        ssync_dll = ctypes.CDLL(os.path.abspath(filename))
+    except Exception:
+        return
+    ssync_dll_loaded = True
+
+    ssync_expected_funcs = [('init', 'SteamAPI_InitSafe', [], ctypes.c_bool),
+                            ('userstats', 'SteamAPI_SteamUserStats_v013', [], ctypes.c_void_p),
+                            ('setach', 'SteamAPI_ISteamUserStats_SetAchievement', [ctypes.c_void_p, ctypes.c_char_p], ctypes.c_bool),
+                            ('clrach', 'SteamAPI_ISteamUserStats_ClearAchievement', [ctypes.c_void_p, ctypes.c_char_p], ctypes.c_bool),
+                            ('getach', 'SteamAPI_ISteamUserStats_GetAchievement', [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_bool)], ctypes.c_bool),
+                            ('progress', 'SteamAPI_ISteamUserStats_IndicateAchievementProgress', [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_uint32], ctypes.c_bool),
+                            ('setstat_i', 'SteamAPI_ISteamUserStats_SetStatInt32', [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int32], ctypes.c_bool),
+                            ('setstat_f', 'SteamAPI_ISteamUserStats_SetStatFloat', [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_float], ctypes.c_bool),
+                            ('getstat_i', 'SteamAPI_ISteamUserStats_GetStatInt32', [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_int)], ctypes.c_bool),
+                            ('getstat_f', 'SteamAPI_ISteamUserStats_GetStatFloat', [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_float)], ctypes.c_bool),
+                            ('store', 'SteamAPI_ISteamUserStats_StoreStats', [ctypes.c_void_p], ctypes.c_bool),
+                            ('user', 'SteamAPI_SteamUser_v023', [], ctypes.c_void_p),
+                            ('steamid', 'SteamAPI_ISteamUser_GetSteamID', [ctypes.c_void_p], ctypes.c_uint64)]
+
+    for x in ssync_expected_funcs:
+        try:
+            ssync_funcs[x[0]] = getattr(ssync_dll, x[1])
+            ssync_funcs[x[0]].argtypes = x[2]
+            ssync_funcs[x[0]].restype = x[3]
+        except Exception:
+            return
+    ssync_dll_funcs_ok = True
+
+def ssync_connect():
+    global ssync_userstats, ssync_connected, ssync_active, flip_required, ssync_last_store, ssync_steamid
+    os.environ['SteamAppId'] = appid
+    if ssync_funcs['init']():
+        ssync_steamid = ssync_funcs['steamid'](ssync_funcs['user']())
+        ssync_userstats = ssync_funcs['userstats']()
+        ssync_count_unlocks()
+        ssync_load_stat_modes()
+        ssync_copy_stats(only_count=True)
+        ssync_connected = True
+        if achdata_source != 'steam_local':
+            ssync_active = True
+    flip_required = True
+
+def ssync_unlock(name):
+    res = bool(ssync_funcs['setach'](ssync_userstats, name.encode('utf-8')))
+    if not res: print('SteamSync unlock failed: ' + name)
+    return res
+
+def ssync_lock(name):
+    res = bool(ssync_funcs['clrach'](ssync_userstats, name.encode('utf-8')))
+    if not res: print('SteamSync lock failed: ' + name)
+    return res
+
+def ssync_get_ach(name):
+    res = ctypes.c_bool()
+    if ssync_funcs['getach'](ssync_userstats, name.encode('utf-8'), ctypes.byref(res)):
+        return res.value
+    print('SteamSync get ach failed: ' + name)
+    return False
+    
+def ssync_show_progress(name, val1, val2):
+    res = bool(ssync_funcs['progress'](ssync_userstats, name.encode('utf-8'), val1, val2))
+    if not res: print(f'SteamSync show progress failed: {name}, {val1}, {val2}')
+    return res
+
+def ssync_set_stat_int(name, val):
+    res = bool(ssync_funcs['setstat_i'](ssync_userstats, name.encode('utf-8'), val))
+    if not res: print(f'SteamSync set stat (int) failed: {name}, {val}')
+    return res
+
+def ssync_set_stat_float(name, val):
+    res = bool(ssync_funcs['setstat_f'](ssync_userstats, name.encode('utf-8'), val))
+    if not res: print(f'SteamSync set stat (float) failed: {name}, {val}')
+    return res
+
+def ssync_set_stat(s, val):
+    if isinstance(s, str):
+        s = stats[s]
+    if s.type == 'int':
+        if not isinstance(val, int):
+            print(f'SteamSync set stat wrong value type ({s.name}, {val} [{type(val).__name__}])')
+            return False
+        return ssync_set_stat_int(s.name, val)
+    elif s.type == 'float':
+        if isinstance(val, int):
+            val = float(val)
+        if not isinstance(val, float):
+            print(f'SteamSync set stat wrong value type ({s.name}, {val} [{type(val).__name__}])')
+            return False
+        return ssync_set_stat_float(s.name, val)
+    else:
+        return False
+
+def ssync_get_stat_int(name):
+    res = ctypes.c_int()
+    if ssync_funcs['getstat_i'](ssync_userstats, name.encode('utf-8'), ctypes.byref(res)):
+        return res.value
+    print('SteamSync get stat (int) failed: ' + name)
+    return -1
+
+def ssync_get_stat_float(name):
+    res = ctypes.c_float()
+    if ssync_funcs['getstat_f'](ssync_userstats, name.encode('utf-8'), ctypes.byref(res)):
+        return res.value
+    print('SteamSync get stat (float) failed: ' + name)
+    return -1.0
+
+def ssync_get_stat(s):
+    if isinstance(s, str):
+        s = stats[s]
+    if s.type == 'int':
+        return ssync_get_stat_int(s.name)
+    elif s.type == 'float':
+        return ssync_get_stat_float(s.name)
+    else:
+        return -1.0
+
+def ssync_store():
+    global flip_required, ssync_last_store, ssync_stats_not_stored
+    res = bool(ssync_funcs['store'](ssync_userstats))
+    if res:
+        ssync_last_store = time.time()
+        ssync_stats_not_stored = False
+    else:
+        print('SteamSync store failed')
+    if viewing == 'steamsync': flip_required = True
+    return res
+
+def ssync_process_queue():
+    store_needed = False
+    while len(ssync_queue) > 0:
+        name = ssync_queue.pop(0)
+        if not ssync_get_ach(name):
+            if ssync_unlock(name):
+                store_needed = True
+    if store_needed:
+        ssync_copy_stats()
+        ssync_store()
+        ssync_count_unlocks()
+    if stg['exp_ssync_progress']:
+        while len(ssync_queue_prog) > 0:
+            name, val1, val2 = ssync_queue_prog.pop(0)
+            val1 = int(val1)
+            val2 = int(val2)
+            ach = find_a(name)
+            if stg['exp_ssync_progress_io'] and ach.progress != None and ach.progress.support:
+                stat = ach.progress.value['operand1']
+                stat = stats[stat]
+                if val1 < ssync_get_stat(stat):
+                    continue
+            ssync_show_progress(name, val1, val2)
+
+    return store_needed
+
+def ssync_count_unlocks():
+    global ssync_steam_unlocks, ssync_resyncable_unlocks
+    ssync_steam_unlocks = 0
+    ssync_resyncable_unlocks = 0
+    for a in achs:
+        if ssync_get_ach(a.name):
+            ssync_steam_unlocks += 1
+        elif a.earned:
+            ssync_resyncable_unlocks += 1
+
+def ssync_resync_achs():
+    for a in achs:
+        if a.earned:
+            ssync_queue.append(a.name)
+    ssync_process_queue()
+
+def ssync_copy_stats(only_count=False):
+    total_can_sync = 0
+    successful = 0
+    for s in stats.values():
+        mode = ssync_stat_modes.get('*', 'inc')
+        mode = ssync_stat_modes.get(s.name, mode)
+        steam_val = ssync_get_stat(s)
+        can_sync = False
+        if mode == 'inc':
+            can_sync = steam_val != -1 and s.value > steam_val
+        elif mode == 'any':
+            can_sync = s.value != steam_val
+        elif mode == 'not':
+            can_sync = False
+        elif mode == 'bit':
+            if s.type != 'int':
+                print(f'Stat {s.name} is not of type int and can\'t have "bit" SteamSync mode')
+            can_sync = s.type == 'int' and steam_val != -1 and steam_val | s.value > steam_val
+        if can_sync:
+            total_can_sync += 1
+            if only_count:
+                continue
+            new_val = s.value
+            if mode == 'bit':
+                new_val = steam_val | s.value
+            if ssync_set_stat(s, new_val):
+                successful += 1
+
+    global ssync_resyncable_stats, ssync_last_copy_stats, ssync_stats_not_stored
+    ssync_resyncable_stats = total_can_sync - successful
+    if not only_count:
+        ssync_last_copy_stats = time.time()
+        ssync_stats_not_stored = True
+
+def ssync_reverse_get_stats():
+    global stats_last_change
+
+    stats_changed = False
+    for stat in stats:
+        new = ssync_get_stat(stats[stat])
+        showing_older_io_val = stats[stat].value != stats[stat].real_value
+        if stats[stat].set_val(new):
+            stats_changed = True
+            if stats[stat].inc_only:
+                increment_only[stat] = stats[stat].value
+                io_change = True
+        if showing_older_io_val != (stats[stat].value != stats[stat].real_value):
+            global flip_required
+            flip_required = True
+
+    if stats_changed:
+        stats_last_change = time.time()
+
+    return stats_changed
+
+def ssync_load_stat_modes():
+    global ssync_stat_modes
+
+    modes = ['inc', 'any', 'not', 'bit']
+
+    if os.path.isfile(f'games/{appid}/ssync_stats.txt'):
+        with open(f'games/{appid}/ssync_stats.txt') as f:
+            lines = f.read().split('\n')
+        for line in lines:
+            spl = line.split(None, 1)
+            if len(spl) == 2 and spl[0] in modes:
+                ssync_stat_modes[spl[1]] = spl[0]
 
 def cmp_init():
     global Achievement, AchievementUnmodded, cmp_init_done
@@ -623,20 +920,26 @@ def cmp_stat_lb(name):
 def cmp_stat_lb_short(name):
     return cmp_leaderboard_short(lambda x : cmp_data[x]['stats'].get(name, stats[name].default if name in stats else -1), stats[name].value)
 
-def cmp_dump(fn=None):
-    if fn == None:
+def cmp_dump(fn=None, ret=False):
+    if fn == None and not ret:
         fn = input('File name: ')
         if fn == '':
             if not os.path.isdir('ach_dumper'):
                 os.makedirs('ach_dumper') 
-            f = f"ach_dumper/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}_cmp.json"   
+            fn = f"ach_dumper/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{achdata_source}_{appid}_cmp.json"   
     data = {'achs': {}, 'stats': {}}
     for ach in achs:
         data['achs'][ach.name] = {'earned': ach.earned, 'earned_time': max(0.0, ach.get_ts(stg['savetime_shown']))}
     for stat in stats.values():
         data['stats'][stat.name] = stat.value
+    if ret:
+        return data
     with open(fn, 'w') as f:
         json.dump(data, f, indent=4)
+
+def cmp_self(name='Self'):
+    data = cmp_dump(None, True)
+    cmp_add_internal(name, 'FILE', (data['achs'], data['stats']))
 
 def get_grid_height():
     return math.ceil(len(achs_f) / achs_to_show_horiz) + stg['exp_grid_empty_line']
@@ -697,7 +1000,7 @@ def unlock_all():
 def edit(n):
     values = {1: ['a'], 2: ['s'], 3: ['as', 'b'], 4: ['f'],
               5: ['sv', 'v'], 6: ['c'], 7: ['g'], 8: ['al'],
-              9: ['gg'], 10: ['st']}
+              9: ['gg'], 10: ['st'], 11: ['fp']}
     for v in values:
         if n in values[v]:
             n = v
@@ -705,6 +1008,7 @@ def edit(n):
         print("This edit() value can't be used when tracking Steam")
         return
     p = None
+    create = False
     if n == 1:
         p = get_player_achs_path(achdata_source, appid, source_extra)
     elif n == 2:
@@ -725,15 +1029,20 @@ def edit(n):
         p = os.path.abspath('games/alias.txt')
     elif n == 9:
         p = os.path.abspath(f'settings/settings_{appid}.txt')
-        if not os.path.isfile(p):
-            with open(p, 'w') as f:
-                pass
+        create = True
     elif n == 10:
         p = os.path.join(get_steam_path(), 'appcache/stats')
+    elif n == 11:
+        p = os.path.abspath(f'games/{appid}/force_progress.txt')
+        create = True
     if p != None:
-        if not(os.path.exists(p)):
-            print(p, 'does not exist')
-            return
+        if not os.path.exists(p):
+            if create:
+                with open(p, 'w') as f:
+                    pass
+            else:
+                print(p, 'does not exist')
+                return
         import webbrowser
         webbrowser.open(p)
     else:
@@ -765,10 +1074,8 @@ def invset(x, vals=None):
         else:
             stg[x] = vals[0]
 
-def ch_lang(l):
-    if not isinstance(l, list):
-        l = [l]
-    stg['language'] = l
+def ch_lang(l=''):
+    stg['language'] = l.split(',')
     load_everything(True, True)
     upd_hist_objs()
 
@@ -791,14 +1098,15 @@ def ch_size(x, y):
     load_everything(True, True)
 
 def ch_game(x):
+    if ssync_connected:
+        print('ch_game() not allowed when SteamSync is connected')
+        return
     if cmp_init_done:
         if cmp_reloading or cmp_loading_global:
             print('Wait for background process to finish before using ch_game()')
             return
         cmp_data.clear()
         cmp_saved_targets.clear()
-        global cmp_unlock_history
-        cmp_unlock_history = ''
 
     global appid, achdata_source, source_extra
     appid, achdata_source, source_extra = load_game(x)
@@ -808,19 +1116,11 @@ def ch_game(x):
         cmp_init()
 
 def ch_emu(x):
-    if cmp_init_done:
-        global cmp_unlock_history
-        cmp_unlock_history = ''
-
     global appid, achdata_source, source_extra
     _, achdata_source, source_extra = load_game(appid + ' ' + x)
     load_everything()
 
 def ch_user(x):
-    if cmp_init_done:
-        global cmp_unlock_history
-        cmp_unlock_history = ''
-
     global appid, achdata_source, source_extra
     source_extra = load_game(appid + ' ' + achdata_source + ' ' + x)[2]
     load_everything()
@@ -1066,7 +1366,7 @@ def draw_game_progress(max_name_length):
     else:
         game_progress_str += ' (0%)'
 
-    if len(cmp_data) > 0 and cmp_stg['unlock_lb']:
+    if len(cmp_data) > 0 and len(achs) > 0 and cmp_stg['unlock_lb']:
         game_progress_str += cmp_unlock_lb_short()
         ucounts = [cmp_data[x]['unlocks'] for x in cmp_data]
         best = max(ucounts)
@@ -1182,7 +1482,7 @@ def draw_ach(i, force_bottom=False):
                 prg_no_min = achs_f[i].progress.get_without_min()
                 if prg_no_min[1] == 0:
                     prg_no_min = (0, 1)
-                if stg['bar_ignore_min']:
+                if stg['bar_ignore_min'] or achs_f[i].progress.min_val == achs_f[i].progress.max_val:
                     prg_val = achs_f[i].progress.real_value
                     prg_no_min = (prg_val, achs_f[i].progress.max_val)
             else:
@@ -1371,7 +1671,7 @@ def draw_achs():
                             prg_no_min = ach.progress.get_without_min()
                             if prg_no_min[1] == 0:
                                 prg_no_min = (0, 1)
-                            if stg['bar_ignore_min']:
+                            if stg['bar_ignore_min'] or ach.progress.min_val == ach.progress.max_val:
                                 prg_no_min = (prg_val, ach.progress.max_val)
                         else:
                             prg_no_min = (1, 1)
@@ -1601,7 +1901,7 @@ def draw_history():
     pygame.display.flip()
 
 def ach_dumper():
-    if viewing in ('console_line', 'compare', 'compare_save'):
+    if viewing in ('console_line', 'compare', 'compare_save', 'steamsync'):
         return
     if viewing == 'history_unlocks' and cmp_unlock_history != '':
         return
@@ -1639,7 +1939,7 @@ def ach_dumper():
 
             can_show_desc = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets
 
-            if stg['secrets_listhide'] and not can_show_desc:
+            if stg_ad['secrets_listhide'] and not can_show_desc:
                 text += '\n\n' + stg_ad['hidden_title']
             else:
                 text += '\n\n' + a.display_name_np
@@ -1681,13 +1981,19 @@ def ach_dumper():
                 text += '\n\nAchievement list has changed'
                 text += '\nSome achievements were added or removed on Steam'
             else:
+                text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_np
                 if h['type'] == 'progress_report':
-                    text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_np
                     text += f" ({h['value'][0]}/{h['value'][1]})"
-                else:
-                    text += '\n\n' + prefixes[h['type']] + h['ach'].display_name_l
+                elif stg_ad['unlockrates'] == 'name':
+                    text += a.rarity_text
                 if not h['ach'].hidden or (h['type'] == 'unlock' and not hide_all_secrets) or reveal_secrets:
-                    text += '\n' + h['ach'].description_l
+                    if h['ach'].has_desc:
+                        d = h['ach'].description_l
+                        if stg['unlockrates'] == 'desc' and h['ach'].rarity != -1.0:
+                            d = d[: -len(h['ach'].rarity_text)]
+                        if stg_ad['unlockrates'] == 'desc' and h['ach'].rarity != 1.0:
+                            d += h['ach'].rarity_text
+                        text += '\n' + d
                 elif len(stg_ad['hidden_desc']) > 0:
                     text += '\n' + stg_ad['hidden_desc']
             if stg_ad['show_timestamps']:
@@ -2207,6 +2513,10 @@ def load_everything(reload=False, keep_data=False):
 
     def load_stats():
         global stats_path, stats_last_change, io_change
+        
+        if achdata_source == 'steam_local' and ssync_connected and str(ssync_steamid & (2 ** 32 - 1)) == source_extra:
+            return ssync_reverse_get_stats()
+        
         m = 'rt'
         if achdata_source in ('sse', 'steam_local'):
             m = 'rb'
@@ -2567,6 +2877,9 @@ def load_everything(reload=False, keep_data=False):
                     continue
             n = x[0]
             if n == '*':
+                force_progress.clear()
+                if rem:
+                    continue
                 for a in achs:
                     if a.progress != None and a.progress.support:
                         st = a.progress.value['operand1']
@@ -2762,27 +3075,28 @@ def load_everything(reload=False, keep_data=False):
         if not reload and stg['exp_history_autosave']:
             load_hist()
 
-    global cmp_data, cmp_saved_targets, cmp_stg, cmp_global_targets, cmp_mark_rare, cmp_mark_rare_remove
+    global cmp_data, cmp_saved_targets, cmp_stg, cmp_global_targets, cmp_mark_rare, cmp_mark_rare_remove, cmp_unlock_history
 
     if os.path.isfile('save/compare/global.json'):
         with open('save/compare/global.json') as f:
             cmp_global_targets = json.load(f)
 
     if not reload:
+        cmp_unlock_history = ''
         if os.path.isfile(f'save/compare/{appid}.json'):
             with open(f'save/compare/{appid}.json') as f:
                 cmp_save = json.load(f)
             cmp_data = cmp_save['cmp_data']
             cmp_saved_targets = [(target, cmp_data[target]['id']) for target in cmp_data]
             cmp_stg.update(cmp_save['cmp_stg'])
-            for target in cmp_data:
-                cmp_count_target_unlocks(target)
         else:
             if os.path.isfile(f'save/compare/global_stg.json'):
                 with open('save/compare/global_stg.json') as f:
                     cmp_stg.update(json.load(f))
             if stg['exp_cmp_autoload_global'] and len(cmp_global_targets) > 0 and (len(achs) > 0 or len(stats) > 0):
                 threading.Thread(target=cmp_load_global, args=(True, ), daemon=True).start()
+    for target in cmp_data:
+        cmp_count_target_unlocks(target)
 
     if not keep_data:
         if len(cmp_data) > 0:
@@ -2892,6 +3206,8 @@ while running:
                         continue
                     achs_unlocked += 1
                     create_notification('unlock', change)
+                    if ssync_active:
+                        ssync_queue.append(change['ach_api'])
                 elif change['type'] == 'lock':
                     achs_unlocked -= 1
                     if change['lock_all']:
@@ -2904,6 +3220,8 @@ while running:
                             lock_all_notified = True
                 elif change['type'] == 'progress_report' and change['value'][0] > 0:
                     create_notification('progress_report', change)
+                    if ssync_connected and (ssync_active or achdata_source == 'steam_local') and stg['exp_ssync_progress']:
+                        ssync_queue_prog.append((change['ach_api'], change['value'][0], change['value'][1]))
 
         if achdata_source == 'steam' or stats_delay_counter >= stg['delay_stats']:
             if achdata_source != 'steam':
@@ -2932,19 +3250,19 @@ while running:
                 flip_required = True
                 for ach in achs:
                     if ach.progress != None and ach.progress.support:
-                        old = ach.progress.current_value
+                        old = ach.progress.real_value
                         ach.progress.calculate(stats)
 
-                        if ach.progress.value['operand1'] in force_progress and ach.progress.current_value > old and not ach.earned:
+                        if ach.progress.value['operand1'] in force_progress and ach.progress.real_value > old and not ach.earned:
                             for achf in force_progress[ach.progress.value['operand1']]:
-                                if ach.progress.current_value >= achf['max']:
+                                if ach.progress.real_value >= achf['max']:
                                     if old < achf['max']:
                                         break
                                     continue
                                 if achf['ach'] != ach.name:
                                     break
-                                if achf['step'] == 0 or (ach.progress.current_value // achf['step'] > old // achf['step']):
-                                    v = ach.progress.current_value
+                                if achf['step'] == 0 or (ach.progress.real_value // achf['step'] > old // achf['step']):
+                                    v = ach.progress.real_value
                                     if achf['round']:
                                         whole = isinstance(v, int)
                                         v = v // achf['step'] * achf['step']
@@ -2955,6 +3273,8 @@ while running:
                                     time_action = time_action.strftime(stg['strftime']) + ' (F)'
                                     ch = {'ach_obj': ach, 'time_real': time_real, 'time_action': time_action, 'value': (v, achf['max'])}
                                     create_notification('progress_report', ch)
+                                    if ssync_connected and (ssync_active or achdata_source == 'steam_local') and stg['exp_ssync_progress']:
+                                        ssync_queue_prog.append((ach.name, v, achf['max']))
                                     break
 
                         if stg['bar_force_unlock']:
@@ -2978,6 +3298,8 @@ while running:
                                     time_action += ' (F)'
                                 ch = {'ach_obj': ach, 'time_real': time_real, 'time_action': time_action}
                                 create_notification('unlock', ch)
+                                if ssync_active:
+                                    ssync_queue.append(ach.name)
                             elif ach.progress.real_value < ach.progress.max_val and ach.force_unlock and stg['forced_keep'] == 'no':
                                 ach.earned = False
                                 ach.earned_time = 0.0
@@ -3004,6 +3326,15 @@ while running:
             send_notification('Too many notifications', f'{notifications_hidden} more notification(s) were hidden')
         if sound_to_play != 0:
             pygame.mixer.Sound.play(sounds[sound_to_play])
+
+        if ssync_connected:
+            if ssync_active or achdata_source == 'steam_local':
+                just_stored = ssync_process_queue()
+            if ssync_active:
+                if stats_changed and not just_stored:
+                    ssync_copy_stats()
+                if ssync_stats_not_stored and time.time() >= ssync_last_store + stg['exp_ssync_store_delay']:
+                    ssync_store()
 
         if fu_change and stg['forced_keep'] == 'save':
             if not os.path.isdir(save_dir):
@@ -3204,19 +3535,23 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.6.0e1')
+                    print(' - Version: v1.7.0e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    no_try = 1 in (keys[pygame.K_LALT], keys[pygame.K_RALT])
                     if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
                         code = last_code
                     else:
                         code = input('Enter code to execute:\n', True)
                     flip_required = True
-                    try:
+                    if no_try:
                         exec(code)
-                    except Exception as ex:
-                        print(f'Failed to execute code - {type(ex).__name__}')
+                    else:
+                        try:
+                            exec(code)
+                        except Exception as ex:
+                            print(f'Failed to execute code - {type(ex).__name__}')
                     last_code = code
             elif event.key == pygame.K_ESCAPE:
                 if viewing == 'console':
@@ -3236,6 +3571,10 @@ while running:
                     viewing = 'compare'
                     cmp_page = 1
                     flip_required = True
+                elif viewing == 'steamsync':
+                    ssync_conn_att = False
+                    viewing = viewing_before_steamsync
+                    flip_required = True
             elif event.key == pygame.K_c:
                 if viewing == 'compare' and cmp_init_done:
                     if cmp_stg['owners_count'] != -1:
@@ -3254,7 +3593,7 @@ while running:
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
                     if viewing == 'console_line':
                         pyperclip.copy(viewing_line['text'])
-                    elif not viewing in ('console', 'console_line', 'compare', 'compare_save') and cmp_unlock_history == '':
+                    elif not viewing in ('console', 'console_line', 'compare', 'compare_save', 'steamsync') and cmp_unlock_history == '':
                         viewing_before_compare = viewing
                         viewing = 'compare'
                         flip_required = True
@@ -3326,11 +3665,15 @@ while running:
                         scroll //= achs_to_show_horiz
                     grid_view = not grid_view
                     flip_required = True
-            elif event.key == pygame.K_RETURN and viewing == 'compare' and not cmp_init_done:
-                keys = pygame.key.get_pressed()
-                cmp_init()
-                if not 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
-                    cmp_add(True)
+            elif event.key == pygame.K_RETURN:
+                if viewing == 'compare' and not cmp_init_done:
+                    keys = pygame.key.get_pressed()
+                    cmp_init()
+                    if not 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]):
+                        cmp_add(True)
+                elif viewing == 'steamsync' and ssync_dll_funcs_ok and not ssync_connected:
+                    ssync_conn_att = True
+                    ssync_connect()
             elif event.key == pygame.K_a:
                 if viewing == 'compare' and cmp_init_done and not (cmp_reloading or cmp_loading_global):
                     keys = pygame.key.get_pressed()
@@ -3338,6 +3681,8 @@ while running:
                 elif viewing == 'compare_save' and not cmp_loading_global:
                     keys = pygame.key.get_pressed()
                     cmp_add_global(1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT]))
+                elif viewing == 'steamsync' and ssync_active:
+                    ssync_resync_achs()
             elif event.key == pygame.K_s:
                 if viewing == 'compare' and cmp_init_done:
                     viewing = 'compare_save'
@@ -3346,6 +3691,20 @@ while running:
                 elif viewing == 'compare_save' and cmp_unsaved_changes and not (cmp_reloading or cmp_loading_global):
                     cmp_save_game_targets()
                     flip_required = True
+                elif viewing == 'steamsync' and ssync_active and ssync_resyncable_stats > 0:
+                    ssync_copy_stats()
+                    ssync_store()
+                keys = pygame.key.get_pressed()
+                if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    if not viewing in ('console', 'console_line', 'compare', 'compare_save', 'steamsync'):
+                        if not ssync_dll_loaded:
+                            ssync_load_dll()
+                        elif ssync_connected:
+                            ssync_count_unlocks()
+                            ssync_copy_stats(only_count=True)
+                        viewing_before_steamsync = viewing
+                        viewing = 'steamsync'
+                        flip_required = True
             elif event.key == pygame.K_l and viewing == 'compare_save':
                 cmp_save_list_shown = not cmp_save_list_shown
                 cmp_page = 1
@@ -3360,11 +3719,15 @@ while running:
                 cmp_unsaved_changes = True
                 cmp_unsaved_changes_global = True
                 flip_required = True
-            elif event.key == pygame.K_SPACE and viewing == 'compare' and cmp_init_done:
-                cmp_stg['sort_targets'] = not cmp_stg['sort_targets']
-                cmp_unsaved_changes = True
-                cmp_unsaved_changes_global = True
-                flip_required = True
+            elif event.key == pygame.K_SPACE:
+                if viewing == 'compare' and cmp_init_done:
+                    cmp_stg['sort_targets'] = not cmp_stg['sort_targets']
+                    cmp_unsaved_changes = True
+                    cmp_unsaved_changes_global = True
+                    flip_required = True
+                elif viewing == 'steamsync' and ssync_connected and achdata_source != 'steam_local':
+                    ssync_active = not ssync_active
+                    flip_required = True
             elif event.key == pygame.K_o:
                 if viewing == 'compare' and (len(cmp_data) > 0 or cmp_sorted):
                     cmp_sorted = not cmp_sorted
@@ -3401,9 +3764,13 @@ while running:
             elif event.key == pygame.K_TAB and viewing == 'compare' and cmp_init_done:
                 cmp_stg['time'] = not cmp_stg['time']
                 flip_required = True
-            elif event.key == pygame.K_p and viewing in ('compare', 'compare_save'):
-                cmp_page += 1
-                flip_required = True
+            elif event.key == pygame.K_p:
+                if viewing in ('compare', 'compare_save'):
+                    cmp_page += 1
+                    flip_required = True
+                elif viewing == 'steamsync' and ssync_connected and (ssync_active or achdata_source == 'steam_local'):
+                    stg['exp_ssync_progress'] = not stg['exp_ssync_progress']
+                    flip_required = True
             elif event.key == pygame.K_h and viewing == 'compare' and len(cmp_data) > 0:
                 target_name = input('Show unlock history for target: ')
                 if target_name in cmp_data:
@@ -3605,6 +3972,13 @@ while running:
                             print(' - Comparison')
                         for x in lb:
                             print(f' - - {x[0]} : {x[1]}')
+                    if ssync_connected and achdata_source != 'steam_local':
+                        steam_val = ssync_get_stat(s)
+                        if steam_val != s.value:
+                            print(f' - Steam value: {steam_val}')
+                        mode = ssync_stat_modes.get('*', 'inc')
+                        mode = ssync_stat_modes.get(s.name, mode)
+                        print(f' - SteamSync mode: {mode}')
             elif viewing == 'history':
                 if len(history) > achs_to_show and event.pos[0] >= stg['window_size_x'] - 10 and event.pos[1] >= header_h:
                     mouse_scrolling = True
@@ -3727,6 +4101,8 @@ while running:
                             print(' - Comparison')
                         for x in lb:
                             print(f" - - {x[0]} : {datetime.fromtimestamp(x[1]).strftime(stg['strftime'])}")
+                    if ssync_connected and achdata_source != 'steam_local':
+                        print(f' - Unlocked on Steam: {ssync_get_ach(a.name)}')
                 except Exception as ex:
                     print(f'Error when printing achievement info: {type(ex).__name__}')
 
@@ -3874,6 +4250,8 @@ while running:
             draw_cmp_menu()
         elif viewing == 'compare_save':
             draw_cmp_save_menu()
+        elif viewing == 'steamsync':
+            draw_steamsync_menu()
         flip_required = False
 
     time.sleep(stg['delay_sleep'])

@@ -266,7 +266,10 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'exp_cmp_expire': {'type': 'time', 'default': 3600},
                   'exp_cmp_autoload_global': {'type': 'bool', 'default': True},
                   'exp_cmp_color_bar_next': {'type': 'color', 'cbn': None, 'default': (192, 192, 192)},
-                  'exp_cmp_color_bar_best': {'type': 'color', 'cbn': None, 'default': (160, 160, 160)}}
+                  'exp_cmp_color_bar_best': {'type': 'color', 'cbn': None, 'default': (160, 160, 160)},
+                  'exp_ssync_store_delay': {'type': 'time', 'default': 180},
+                  'exp_ssync_progress': {'type': 'bool', 'default': True},
+                  'exp_ssync_progress_io': {'type': 'bool', 'default': False}}
 
 def load_settings(appid, source, ach_dumper=False):
     settings = {}
