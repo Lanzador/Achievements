@@ -305,6 +305,8 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `color_text_hover` - text color for achievements when they're hovered over. Default: Empty
 
+`color_text_complete` - text color for game name and completion progress when all achievements are unlocked. Default: Empty
+
 `color_time_general` - use `color_text` instead of the achievement's text color for timestamps. Default: `false`
 
 `color_progress_report` - colors to use for progress reports notifications in history. `mixed` - unlock colors for some parts of the notification, lock colors for the rest of it (default); `unlock` - unlock colors only; `lock` - lock colors only.
@@ -313,7 +315,7 @@ Settings can be changed in `settings/settings.txt`. You can also create `setting
 
 `color_bar_fill` - color to use for progressbar fill. Default: `255,255,255` - fun fact: this was originally `0,255,0`
 
-`color_bar_completed` - color to use instead of `color_bar_fill` for full bars. Default: Empty
+`color_bar_complete` - color to use instead of `color_bar_fill` for full bars. Default: Empty
 
 `color_scrollbar` - color to use for scrollbar. Default: `128,128,128`
 

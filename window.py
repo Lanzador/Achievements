@@ -139,7 +139,7 @@ def draw_progressbar(x, y, w, h, p1, p2):
         pygame.draw.rect(screen, stg['color_bar_bg'], pygame.Rect(x, y, w, h))
         c2 = stg['color_bar_fill']
         if p1 == p2:
-            c2 = stg['color_bar_completed']
+            c2 = stg['color_bar_complete']
         if p2 != 0:
             pygame.draw.rect(screen, c2, pygame.Rect(x, y, p1 * w // p2, h))
 
@@ -156,24 +156,29 @@ def draw_game_progress(max_name_length):
     positions = {'normal': 30, 'repname': 15, 'under': 42, 'hide': None}
     y = positions[stg['gamebar_position']]
     t = gamename
+    text_color = stg['color_text']
+    if stg['color_text_complete'] != None and achs_unlocked == len(achs):
+        text_color = stg['color_text_complete']
     if header_extra == 'search' or search_request != '':
         t = f'Search: {search_request}'
     if (stg['gamebar_position'] != 'repname' or header_extra[:6] == 'search') and max_name_length > 0:
         ty = 10
         if stg['gamebar_position'] in ('under', 'hide') and stg['font_size_general'] <= 22:
             ty += round((22 - stg['font_size_general']) / 2)
-        long_text(screen, max_name_length, font_general, t, (10, ty), stg['color_text'])
+        long_text(screen, max_name_length, font_general, t, (10, ty), text_color)
+
     if stg['gamebar_position'] == 'hide':
         return
     if stg['gamebar_position'] == 'repname' and header_extra[:6] == 'search':
         return
+
     draw_progressbar(10, y, stg['gamebar_length'], 13, achs_unlocked, len(achs))
     game_progress_str = f'{achs_unlocked}/{len(achs)}'
     if len(achs) > 0:
         game_progress_str += f' ({achs_unlocked * 100 // len(achs)}%)'
     else:
         game_progress_str += ' (0%)'
-    show_text(screen, font_general, game_progress_str, (stg['gamebar_length'] + 20, y - 2), stg['color_text'])
+    show_text(screen, font_general, game_progress_str, (stg['gamebar_length'] + 20, y - 2), text_color)
 
 def draw_achs():
     screen.fill(stg['color_background'])
@@ -748,8 +753,8 @@ if stg['color_text_rare'] == None:
     stg['color_text_rare'] = stg['color_text_unlock']
 if stg['color_text_rare_lock'] == None:
     stg['color_text_rare_lock'] = stg['color_text_lock']
-if stg['color_bar_completed'] == None:
-    stg['color_bar_completed'] = stg['color_bar_fill']
+if stg['color_bar_complete'] == None:
+    stg['color_bar_complete'] = stg['color_bar_fill']
 if len(stg['language']) == 0:
     stg['language'].append('english')
 if stg['language_requests'] == None:
@@ -2032,7 +2037,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.7.0')
+                print(' - Version: v1.7.1')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):

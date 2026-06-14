@@ -1,3 +1,7 @@
+## v1.7.1
+- Added `color_text_complete`
+- Renamed `color_bar_completed` to `color_bar_complete`
+
 ## v1.7.0
 - Fix schemas being treated as empty because of changes to file format
 - Automatically apply `bar_ignore_min` behavior to achievements where min_val = max_val
