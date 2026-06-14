@@ -92,7 +92,7 @@ When this feature is enabled, new local unlocks and stat changes from a Steam em
 
 This was added for re-unlocking achievements (which are already unlocked on Steam) locally while still saving first-time unlocks to Steam.
 
-Requires `steam_api.dll` or `steam_api64.dll` next to `.exe`/`.py`. DLL bitness must match bitness of executable (recent public releases are 64-bit) or Python installation (if running `.py`). Use the DLL from [Steamwords SDK](https://partner.steamgames.com/downloads/list) v1.64, other versions are not guaranteed to work.
+Requires `steam_api.dll`, `steam_api64.dll` or `libsteam_api.so` next to `.exe`/`.py`. DLL bitness must match bitness of executable (recent public releases are 64-bit) or Python installation (if running `.py`). Use the DLL from [Steamwords SDK](https://partner.steamgames.com/downloads/list) v1.64, other versions are not guaranteed to work.
 
 All stats are synced whenever any stat changes or an achievement is unlocked. Achievements unlocked while SteamSync is disabled are not automatically synced.
 

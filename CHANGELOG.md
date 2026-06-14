@@ -1,3 +1,6 @@
+## v1.7.1e1
+- Fix grid mode causing a crash when `bar_ignore_min` behavior is applied to an achievement
+
 ## v1.7.0e1
 - SteamSync: a feature to copy local unlocks and stat changes to Steam as soon as they're detected
 - `cmp_dump()`: add `ret` argument and fix error when using auto-generated `ach_dumper/...` filename
