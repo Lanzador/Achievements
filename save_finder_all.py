@@ -101,14 +101,14 @@ while have_more_results:
         if int(app_list.status_code / 100) != 4:
             print(f'Downloading app names... (Last AppID: {last_appid})')
             app_list = app_list.json()['response']
+            for app in app_list['apps']:
+                if str(app['appid']) in appids:
+                    app_names[str(app['appid'])] = app['name']
             have_more_results = app_list.get('have_more_results', False)
             if have_more_results:
                 last_appid = app_list['last_appid']
                 if last_appid >= max_appid:
                     break
-            for app in app_list['apps']:
-                if str(app['appid']) in appids:
-                    app_names[str(app['appid'])] = app['name']
         else:
             print(f'[!] Failed to download app names ({app_list.status_code})')
             break
