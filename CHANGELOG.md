@@ -1,3 +1,11 @@
+## v1.8.0e1
+- Achievement display profiles and related settings
+- ADP-related `edit()` values
+- Fix comparison info not being shown for locked achievements if `savetime_show_locked` isn't enabled
+- Added `rmcfg()`
+- Update achieveemnt list after a comparison target is added/removed in case comparison filtering/sorting is enabled
+- Apply comparison unlock count sorting BEFORE regular sorting options
+
 ## v1.7.1e1
 - Fix grid mode causing a crash when `bar_ignore_min` behavior is applied to an achievement
 

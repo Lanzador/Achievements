@@ -172,6 +172,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'unlocks_on_top': {'type': 'bool', 'default': False},
                   'unlocks_timesort': {'type': 'bool', 'default': False},
                   'sort_by_rarity': {'type': 'bool', 'default': False},
+                  'order_by_set': {'type': 'choice', 'allowed': ['none', 'first', 'last'], 'default': 'none'},
                   'bar_length': {'type': 'int', 'default': 300},
                   'bar_unlocked': {'type': 'choice', 'allowed': ['show', 'full', 'hide', 'zerolen'], 'default': 'full'},
                   'bar_hide_unsupported': {'type': 'choice', 'allowed': ['none', 'stat', 'all'], 'default': 'none'},
@@ -237,6 +238,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'color_achbg_hover': {'type': 'color', 'cbn': None, 'default': (64, 64, 64)},
                   'achbg_rarity': {'type': 'choice', 'allowed': ['no', 'sort', 'yes'], 'default': 'no'},
                   'achbg_rarity_relative': {'type': 'bool', 'default': False},
+                  'achbg_frame_height': {'type': 'int', 'default': None},
                   'save_timestamps': {'type': 'bool', 'default': True},
                   'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'first'},
                   'savetime_mark': {'type': 'bool', 'default': False},
@@ -247,6 +249,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'stat_display_names': {'type': 'bool', 'default': True},
                   'generator_path': {'type': 'str', 'default': ''},
                   'generator_priority': {'type': 'bool', 'default': True},
+                  'ach_dumper_open': {'type': 'bool', 'default': True},
                   'api_key': {'type': 'str', 'default': ''},
                   'exp_console_max_lines': {'type': 'int', 'default': 0},
                   'exp_no_cmd_input': {'type': 'bool', 'default': False},
@@ -270,13 +273,17 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'exp_cmp_color_bar_best': {'type': 'color', 'cbn': None, 'default': (160, 160, 160)},
                   'exp_ssync_store_delay': {'type': 'time', 'default': 180},
                   'exp_ssync_progress': {'type': 'bool', 'default': True},
-                  'exp_ssync_progress_io': {'type': 'bool', 'default': False}}
+                  'exp_ssync_progress_io': {'type': 'bool', 'default': False},
+                  'exp_use_display_profiles': {'type': 'bool', 'default': False},
+                  'exp_adp_ignore_stg_rare': {'type': 'bool', 'default': True},
+                  'exp_adp_ignore_stg_hover': {'type': 'bool', 'default': False}}
 
 def load_settings(appid, source, ach_dumper=False):
     settings = {}
     for sett in known_settings:
         settings[sett] = known_settings[sett]['default']
-    filenames = ['settings', f'settings_{source}', f'settings_{appid}', f'settings_{appid}_{source}']
+    filenames = ['settings', f'settings_{source}', f'../games/{appid}/settings',
+                f'settings_{appid}', f'../games/{appid}/settings_{source}', f'settings_{appid}_{source}']
     for f in filenames:
         settings = load_settings_file(settings, f + '.txt')
         if ach_dumper:
@@ -288,74 +295,78 @@ def load_settings_file(settings, filename):
     try:
         with open(filename, encoding='utf-8') as stgfile:
             stgtext = stgfile.read()
-        stgtext = stgtext.split('\n')
-        for sett in stgtext:
-            sett = sett.split('=', 1)
-            if len(sett) > 1 and sett[0] in known_settings:
-                if (known_settings[sett[0]]['default'] == None or 'cbn' in known_settings[sett[0]]) and sett[1] == '':
-                    settings[sett[0]] = None
-                elif known_settings[sett[0]]['type'] == 'str':
-                    settings[sett[0]] = sett[1]
-                elif known_settings[sett[0]]['type'] == 'int':
-                    if sett[1].isnumeric() or (sett[1].startswith('-') and sett[1][1:].isnumeric()):
-                        val = int(sett[1])
-                    if val >= 0 or 'negative' in known_settings[sett[0]]:
-                        settings[sett[0]] = val
-                elif known_settings[sett[0]]['type'] == 'float':
-                    if sett[1].count('.') < 2 and sett[1].replace('.', '').isnumeric():
-                        settings[sett[0]] = float(sett[1])
-                elif known_settings[sett[0]]['type'] == 'bool':
-                    if sett[1] == '1' or sett[1].lower() == 'true':
-                        settings[sett[0]] = True
-                    elif sett[1] == '0' or sett[1].lower() == 'false':
-                        settings[sett[0]] = False
-                elif known_settings[sett[0]]['type'] == 'choice':
-                    if sett[1] in known_settings[sett[0]]['allowed']:
-                        settings[sett[0]] = sett[1]
-                elif known_settings[sett[0]]['type'] == 'color':
-                    if sett[1].count(',') == 2 and sett[1].replace(',', '').isnumeric():
-                        spl = sett[1].split(',')
-                        as_color = (int(spl[0]), int(spl[1]), int(spl[2]))
-                        if as_color[0] <= 255 and as_color[1] <= 255 and as_color[2] <= 255:
-                            settings[sett[0]] = as_color
-                elif known_settings[sett[0]]['type'] == 'list':
-                    if len(sett[1]) > 0:
-                        settings[sett[0]] = sett[1].split(',')
-                    else:
-                        settings[sett[0]] = list()
-                elif known_settings[sett[0]]['type'] == 'fontlist':
-                    fonts = {}
-                    if 'all' in known_settings[sett[0]]['default']:
-                        fonts['all'] = known_settings[sett[0]]['default']['all']
-                    spl = sett[1].split(';')
-                    for s in spl:
-                        if len(s) == 0:
-                            continue
-                        s = s.split(':')
-                        if len(s) == 1:
-                            fonts['all'] = s[0]
-                        elif len(s) == 2:
-                            langs = s[0].split(',')
-                            for lang in langs:
-                                fonts[lang] = s[1]
-                    settings[sett[0]] = fonts
-                elif known_settings[sett[0]]['type'] == 'time' and len(sett[1]) > 0:
-                    units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-                    num = sett[1]
-                    if sett[1][-1] in units:
-                        if len(sett[1]) > 1:
-                            num = num[:-1]
-                        else:
-                            continue
-                        unit = sett[1][-1]
-                    else:
-                        unit = 's'                    
-                    if len(num.split('.')) < 3 and num.replace('.', '').isnumeric():
-                        settings[sett[0]] = float(num) * units[unit]
-            elif sett[0] == 'add_file' and len(sett) > 1 and len(sett[1]) > 0:
-                settings = load_settings_file(settings, sett[1])
+        settings = load_settings_file_contents(settings, stgtext)
     except FileNotFoundError:
         pass
+    return settings
+
+def load_settings_file_contents(settings, stgtext):
+    stgtext = stgtext.split('\n')
+    for sett in stgtext:
+        sett = sett.split('=', 1)
+        if len(sett) > 1 and sett[0] in known_settings:
+            if (known_settings[sett[0]]['default'] == None or 'cbn' in known_settings[sett[0]]) and sett[1] == '':
+                settings[sett[0]] = None
+            elif known_settings[sett[0]]['type'] == 'str':
+                settings[sett[0]] = sett[1]
+            elif known_settings[sett[0]]['type'] == 'int':
+                if sett[1].isnumeric() or (sett[1].startswith('-') and sett[1][1:].isnumeric()):
+                    val = int(sett[1])
+                if val >= 0 or 'negative' in known_settings[sett[0]]:
+                    settings[sett[0]] = val
+            elif known_settings[sett[0]]['type'] == 'float':
+                if sett[1].count('.') < 2 and sett[1].replace('.', '').isnumeric():
+                    settings[sett[0]] = float(sett[1])
+            elif known_settings[sett[0]]['type'] == 'bool':
+                if sett[1] == '1' or sett[1].lower() == 'true':
+                    settings[sett[0]] = True
+                elif sett[1] == '0' or sett[1].lower() == 'false':
+                    settings[sett[0]] = False
+            elif known_settings[sett[0]]['type'] == 'choice':
+                if sett[1] in known_settings[sett[0]]['allowed']:
+                    settings[sett[0]] = sett[1]
+            elif known_settings[sett[0]]['type'] == 'color':
+                if sett[1].count(',') == 2 and sett[1].replace(',', '').isnumeric():
+                    spl = sett[1].split(',')
+                    as_color = (int(spl[0]), int(spl[1]), int(spl[2]))
+                    if as_color[0] <= 255 and as_color[1] <= 255 and as_color[2] <= 255:
+                        settings[sett[0]] = as_color
+            elif known_settings[sett[0]]['type'] == 'list':
+                if len(sett[1]) > 0:
+                    settings[sett[0]] = sett[1].split(',')
+                else:
+                    settings[sett[0]] = list()
+            elif known_settings[sett[0]]['type'] == 'fontlist':
+                fonts = {}
+                if 'all' in known_settings[sett[0]]['default']:
+                    fonts['all'] = known_settings[sett[0]]['default']['all']
+                spl = sett[1].split(';')
+                for s in spl:
+                    if len(s) == 0:
+                        continue
+                    s = s.split(':')
+                    if len(s) == 1:
+                        fonts['all'] = s[0]
+                    elif len(s) == 2:
+                        langs = s[0].split(',')
+                        for lang in langs:
+                            fonts[lang] = s[1]
+                settings[sett[0]] = fonts
+            elif known_settings[sett[0]]['type'] == 'time' and len(sett[1]) > 0:
+                units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+                num = sett[1]
+                if sett[1][-1] in units:
+                    if len(sett[1]) > 1:
+                        num = num[:-1]
+                    else:
+                        continue
+                    unit = sett[1][-1]
+                else:
+                    unit = 's'                    
+                if len(num.split('.')) < 3 and num.replace('.', '').isnumeric():
+                    settings[sett[0]] = float(num) * units[unit]
+        elif sett[0] == 'add_file' and len(sett) > 1 and len(sett[1]) > 0:
+            settings = load_settings_file(settings, sett[1])
     return settings
 
 if __name__ == '__main__':

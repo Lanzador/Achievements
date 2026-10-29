@@ -26,6 +26,10 @@ class Achievement:
         if 'progress' in achdata and isinstance(achdata['progress'], dict):
             self.progress = AchievementProgress(achdata['progress'], stats)
 
+        self.groupid = None
+        if 'groupid' in achdata:
+            self.groupid = str(achdata['groupid'])
+
         self.earned = False
         self.earned_time = 0.0
         self.progress_reported = None
@@ -53,13 +57,14 @@ class Achievement:
         self.has_desc = isinstance(self.display_name, str) or 'english' in self.description
         self.long_desc = False
 
-        self.language, self.display_name_l = self.pick_language(self.display_name, stg)
+        self.language, self.display_name_l = Achievement.pick_language(self.display_name, stg)
+        self.display_name_np = self.display_name_l
         if self.has_desc:
-            self.language_d, self.description_l = self.pick_language(self.description, stg)
+            self.language_d, self.description_l = Achievement.pick_language(self.description, stg)
+            self.description_np = self.description_l
         else:
             self.language_d = self.language
 
-        self.display_name_np = self.display_name_l
         self.rarity = -1.0
         self.rarity_text = ''
         self.rare = False
@@ -69,7 +74,7 @@ class Achievement:
             if stg != None and self.rarity != -1.0 and self.rarity < stg['rare_below']:
                 self.rare = True
 
-    def pick_language(self, data, stg):
+    def pick_language(data, stg):
         language = 'english'
         if isinstance(data, str):
             translation = data
@@ -79,7 +84,7 @@ class Achievement:
                     if l in data:
                         language = l
                         break
-            translation = data[language]
+            translation = str(data[language])
         return (language, translation)
 
     def get_ts(self, savetime_shown):
@@ -166,12 +171,16 @@ class AchievementProgress:
             return (False, 'Unsupported stat type')
         return (True, None)
 
-def filter_achs(achs, state, stg):
+def filter_achs(achs, state, stg, ach_groups):
     achs_f = []
     secrets_hidden = 0
     first_lock = 0
 
     achs = achs.copy()
+
+    if stg['order_by_set'] == 'first':
+        achs.sort(key=lambda a : (ach_groups[a.groupid]['custom_order'] if a.groupid in ach_groups else -1) \
+                                  if a.icon_gray != 'hidden_dummy_ach_icon' else max(map(lambda g : g['custom_order'], ach_groups.values())) + 1)
 
     if stg['unlockrates'] != 'none' and stg['sort_by_rarity']:
         achs.sort(key=lambda a : a.rarity, reverse=True)
@@ -180,6 +189,8 @@ def filter_achs(achs, state, stg):
         if state == 1 and not ach.earned:
             continue
         if state == 2 and ach.earned:
+            continue
+        if ach.groupid in ach_groups and not ach_groups[ach.groupid]['display']:
             continue
 
         if stg['secrets'] != 'normal' and ach.hidden and not ach.earned:
@@ -200,7 +211,7 @@ def filter_achs(achs, state, stg):
             insert_at -= secrets_hidden
         achs_f.insert(insert_at, ach)
 
-    if state != 1 and secrets_hidden > 0 and not (stg['secrets'] == 'bottom' and not stg['secrets_bottom_count']):
+    if state != 1 and secrets_hidden > 0 and not (stg['secrets'] == 'bottom' and (not stg['secrets_bottom_count'] or stg['order_by_set'] == 'last')):
         insert_at = len(achs_f)
         if stg['secrets'] == 'bottom':
             insert_at = -secrets_hidden
@@ -218,6 +229,10 @@ def filter_achs(achs, state, stg):
         unlocked_slice.reverse()
         unlocked_slice.sort(key=lambda a : a.get_ts(stg['savetime_shown']), reverse=True)
         achs_f = unlocked_slice + achs_f[first_lock:]
+
+    if stg['order_by_set'] == 'last':
+        achs_f.sort(key=lambda a : (ach_groups[a.groupid]['custom_order'] if a.groupid in ach_groups else -1) \
+                                  if a.icon_gray != 'hidden_dummy_ach_icon' else max(map(lambda g : g['custom_order'], ach_groups.values())) + 1)
 
     return achs_f
 
@@ -377,10 +392,13 @@ def process_schema(appid, data, ids_only=False):
            'stat_dnames': {},
            'stats_io': [],
            'ach_ids': {},
-           'stat_ids': {}}
+           'stat_ids': {},
+           'groups': {}}
 
     stat_types = {'1': 'int', '2': 'float', '3': 'avgrate',
                   'INT': 'int', 'FLOAT': 'float', 'AVGRATE': 'avgrate'}
+  
+    groupless_ach_present = False
 
     for s_key in data[appid]['stats']:
         s = data[appid]['stats'][s_key]
@@ -401,7 +419,8 @@ def process_schema(appid, data, ids_only=False):
                 else: default = '0'
 
             out['stats'].append([s['name'], stat_types[s['type']], default])
-            out['stat_dnames'][s['name']] = s['display']['name']
+            if 'display' in s:
+                out['stat_dnames'][s['name']] = s['display']['name']
             if int(s.get('incrementonly', 0)) == 1: out['stats_io'].append(s['name'])
         elif s['type'] == '4' or s['type'] == 'ACHIEVEMENTS':
             id_dict = {}
@@ -419,7 +438,23 @@ def process_schema(appid, data, ids_only=False):
                 if 'icon_gray' in b['display']: ach['icon_gray'] = b['display']['icon_gray']
                 ach['name'] = b['name']
                 if 'progress' in b: ach['progress'] = b['progress']
+                if 'groupid' in b:
+                    ach['groupid'] = b['groupid']
+                else:
+                    groupless_ach_present = True
                 out['achs'].append(ach)
             out['ach_ids'][s_key] = id_dict
+
+    if not ids_only and 'groups' in data[appid]:
+        for g_key in data[appid]['groups']:
+            g_key = str(g_key)
+            g = data[appid]['groups'][g_key]
+            out['groups'][g_key] = {}
+            out['groups'][g_key]['name'] = g.get('name', 'Group ' + str(g_key))
+            out['groups'][g_key]['dlcappid'] = g.get('dlcappid', None)
+            out['groups'][g_key]['order'] = g.get('order', None)
+
+        if len(out['groups']) > 0 and groupless_ach_present:
+            out['groups'] = {None: {'name': {'english': 'Base game'}, 'dlcappid': None, 'order': -1}} | out['groups']
 
     return out

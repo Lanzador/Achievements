@@ -100,7 +100,7 @@ Press `A` in SteamSync menu (while it's active) to sync achievements unlocked lo
 
 Press `S` to sync stats. Unlike automatically triggered updates, the changes are immediately stored.
 
-For automatic stat updates, `StoreStats` is only called if at least `exp_ssync_store_delay` (default: 3 minutes) have passed since last call. If it's too early, stats will be stored once the timer expires. Steam stores everything once you stop playig no matter how much time has passed since last call.
+For automatic stat updates, `StoreStats` is only called if at least `exp_ssync_store_delay` (default: 3 minutes) have passed since last call. If it's too early, stats will be stored once the timer expires. Steam stores everything once you stop playing no matter how much time has passed since last call.
 
 Since Steam sees this program as the game's process when using SteamSync, don't forget to close it to avoid extra playtime.
 
@@ -132,6 +132,172 @@ bit Stat3_APIname
 `not` - never sync this stat.
 
 `bit` - write the bitwise OR of the Steam value and the local value to Steam. Some games use stats to track which parts of an achievement's requirement were completed, using one bit per part. For example, if an achievement requires finding all chests, each bit can represent a specific chest.
+
+## Achievement display profiles
+
+Display profiles allow applying different appearance settings to achievements based on various conditions.
+
+To start using display profiles, enable `exp_use_display_profiles` in settings and write your configuration in `settings/profiles.txt` (game-specific configs can be created just like with `settings.txt`).
+
+Profile files must follow the format below:
+
+```
+profile [CONDITION]
+[OPTIONS]
+```
+
+For example:
+
+```
+profile title contains ending
+  frame_color_unlock=0,255,0
+  frame_color_lock=0,128,0
+
+profile rarity != -1 and rarity<10
+  profname yellow
+  color_text_unlock=255,255,0
+
+profile rarity != -1 and rarity<5
+  color_text_unlock=0,255,255
+  final
+
+profile cmp_unlock_count<3
+  applyprof yellow
+  frame_size=4
+```
+
+Keywords must be lowercase. All conditions have three parts: achievement property, operator, value. `and` has priority over `or`. Parentheses can't be used, but you can use `profcond`:
+
+```
+profile conditionA or conditionB
+  profname OR
+profile profcond=OR and conditionC
+  [options]
+```
+
+`exp_adp_ignore_stg_rare` is enabled by default, which means that options like `color_frame_rare` are ignored and regular options (like `color_frame_unlock`) are expected to be used together with rarity-related conditions.
+
+Language, fonts and sounds can't be changed this way.
+
+Appearance options have the same names and format used in `settings.txt`. Some special keywords are available:
+
+- `profname NAME` - assigns a profile name for use with `applyprof` and `profcond`.
+
+- `applyprof NAME` - apply options from the given profile. Doesn't copy `reset` or `final`.
+
+- `final` - if this profile's condition matched, ignore all profiles below (only affects profiles from the current file).
+
+- `final all` - same as `final`, but ignores profiles from all files.
+
+- `reset` - if this profile's condition matched, revert all options from previous profiles before applying this profile.
+
+- `file NAME` - load profiles from `settings/NAME` (similar to `add_file=` from `settings.txt`)
+
+Available properties:
+
+- `name` (string) - API name
+
+- `title_rev` (string) - display name
+
+- `title` (string) - display name (empty if hidden by `secrets_listhide`)
+
+- `description_rev` (string) - description
+
+- `description` (string) - description (empty for locked hidden achievements)
+
+- `has_desc` (number, 0 or 1) - 1 if the achievement has a description
+
+- `hidden` (number, 0 or 1) - 1 for hidden achievements
+
+- `icon_gray` (string) - locked icon file name
+
+- `icon` (string) - unlocked icon file name
+
+- `groupid` (string) - achievement set ID (can be `None`)
+
+- `groupdlc` - (number, 0 or 1) - 1 if the achievement's set is from a DLC
+
+- `rarity_rel` (number) - rarity percentage relative to the most common achievement's rarity
+
+- `rarity_position_unlock_rev` (number) - similar to `rarity_position_rev` (only unlocked achievements, -1 for locked ones)
+
+- `rarity_position_unlock` (number) - similar to `rarity_position` (only unlocked achievements, -1 for locked ones)
+
+- `rarity_position_lock_rev` (number) - similar to `rarity_position_rev` (only locked achievements, -1 for unlocked ones)
+
+- `rarity_position_lock` (number) - similar to `rarity_position` (only locked achievements, -1 for unlocked ones)
+
+- `rarity_position_rev` (number) - similar to `rarity_position` (1 = most common)
+
+- `rarity_position` (number) - the achievement's position when achievements are sorted by rarity (1 = rarest)
+
+- `rarity_at_pos` (special) - `rarity_at_pos = 1, 5.5` is true if the achievement with `rarity_position` equal to `1` has a rarity percentage of `5.5`.  Use negative position numbers for `rarity_position_rev`-like behavior (for example, `rarity_at_pos = -1, 100` for the most common achievement). Supports `<=`, `<`, `=`, `!=`, `>=`, `>`.
+
+- `rarity` (number) - rarity percentage, -1 if unknown
+
+- `min_rarity_rel` (number) - rarity percentage of the rarest achievement relative to the most common achievement's rarity
+
+- `min_rarity` (number) - rarity percentage of the rarest achievement
+
+- `max_rarity` (number) - rarity percentage of the most common achievement
+
+- `prev_rarity` (number) - rarity percentage of the previous, less common achievement
+
+- `next_rarity` (number) - rarity percentage of the next, more common achievement
+
+- `rare` (number, 0 or 1) - 1 if the achievement is marked as rare
+
+- `unlock_time` (number) - unlock timestamp (0 if the achievement is locked and no previous timestamp is recorded)
+
+- `unlock` (number, 0 or 1) - 1 if the achievement is unlocked
+
+- `force_unlock` (number, 0 or 1) - 1 if the achievement is "force-unlocked"
+
+- `progress_exists` (number, 0 or 1) - 1 if the achievement has a progress bar
+
+- `progress_target` (number) - progress bar target value (0 if no progress bar exists)
+
+- `current_progress_rel` (number) - current progress bar value as a percentage (0 if no progress bar exists)
+
+- `current_progress` (number) - current progress bar value (0 if no progress bar exists)
+
+- `hover` (number, 0 or 1) - 1 when the achievement is hovered over
+
+- `ach_count` (number) - total achievement count
+
+- `grid_view` (number, 0 or 1) - 1 when grid view is active
+
+- `cmp_unlock_count` (number) - number of comparison targets that have this achievement
+
+- `cmp_target_count` (number) - number of comparison targets
+
+- `cmp_targets` (list) - names of all comparison targets
+
+- `cmp_owners` (list) - names of comparison targets that have this achievement
+
+- `ssync_unlock` (number, 0 or 1) - 1 if SteamSync is connected and this achievement is unlocked on Steam
+
+- `profcond` (special) - `profcond=NAME` is true when the profile with `profname NAME` has a condition that is true
+
+- `notprofcond` (special) - `notprofcond=NAME` is true when `profcond=NAME` is false
+
+Available operators:
+
+- For number properties: `<=`, `<`, `=`, `!=`, `>=`, `>`
+
+- For string properties (`case` versions are case-sensitive):
+
+  - `=`, `!=`
+
+  - `len<`, `len=`, `len>` (length comparison)
+
+  - `containscase`, `contains`, `notcontainscase`, `notcontains`
+
+  - `startswithcase`, `startswith`, `notstartswithcase`, `notstartswith`
+
+  - `endswithcase`, `endswith`, `notendswithcase`, `notendswith`
+
+- For list properties: `contains`, `notcontains`
 
 ## Settings
 There are some settings exclusive to this version.
@@ -182,6 +348,12 @@ There are some settings exclusive to this version.
 
 `exp_ssync_progress_io` - only copy progress notifications if reported progress is not less than the stat value from Steam. Shouldn't be enabled if using `:r` in `force_progress.txt`. Even if this setting is disabled, Steam will not show the actual reported values if they're less than the stat's value. Default: `false`
 
+`exp_use_display_profiles` - use achievement display profiles. Default: `false`
+
+`exp_adp_ignore_stg_rare` - if enabled, `_rare` and `_rare_lock` settings are ignored and their values are replaced by values of corresponding `_unlock` and `_lock` settings. Only used when achievement display profiles are enabled. Default: `true`
+
+`exp_adp_ignore_stg_hover` - if enabled, `_hover` settings are ignored and their values are considered empty. Only used when achievement display profiles are enabled. Default: `false`
+
 ## Functions
 These functions can be used through `Ctrl+E`.
 
@@ -222,6 +394,12 @@ These functions can be used through `Ctrl+E`.
 - `n=10`, `n='st'` - `Steam/appcache/stats`
 
 - `n=11`, `n='fp'` - `force_progress.txt` (will be created if doesn't exist)
+
+- `n=12`, `n='adp'` - `settings/profiles.txt`
+
+- `n=13`, `n='adpg'` - `settings/profiles_[AppID].txt` (will be created if doesn't exist)
+
+`rmcfg()` - delete `games/[AppID]`.
 
 `defset()` - set default settings.
 

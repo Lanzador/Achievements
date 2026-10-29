@@ -64,3 +64,17 @@ ssync_last_copy_stats = 0.0
 ssync_stats_not_stored = False
 ssync_steamid = 0
 ssync_stat_modes = {}
+
+adp_profiles = []
+adp_profnames = {}
+adp_temp_ignore_hover = False
+adp_sorted_urates_achs = []
+adp_sorted_urates = []
+adp_sorted_urates_unlock = []
+adp_sorted_urates_lock = []
+adp_sorted_urates_rev = []
+adp_sorted_urates_unlock_rev = []
+adp_sorted_urates_lock_rev = []
+adp_min_rarity_rel = -1.0
+adp_min_rarity = -1.0
+adp_countcond_cache = {}

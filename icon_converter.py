@@ -58,7 +58,7 @@ for appid in appids:
     schema_as_config = os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bin')
     config_from_fork = not schema_as_config and os.path.isdir(f'games/{appid}/img')
     icons_path = f'games/{appid}/achievement_images'
-    if config_from_fork:
+    if config_from_fork or (schema_as_config and not os.path.isdir(icons_path)):
         icons_path = f'games/{appid}/img'
     conv_path = icons_path + '/ico'
 
@@ -96,7 +96,7 @@ for appid in appids:
         if 'icon_gray' in ach:
             icons.add(ach['icon_gray'])
 
-    if not os.path.isdir(conv_path):
+    if os.path.isdir(icons_path) and not os.path.isdir(conv_path):
         os.makedirs(conv_path)
 
     done = 0
