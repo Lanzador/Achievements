@@ -115,6 +115,28 @@ def send_steam_request(name, link):
         print(f'Unhandled request error: {type(ex).__name__} ({name})')
     return None
 
+def recalculate_ach_counts():
+    global achs_unlocked
+    achs_only_counted_sets.clear()
+    achs_unlocked = 0
+    for ach in achs:
+        if not ach.groupid in ach_groups or ach_groups[ach.groupid]['count']:
+            achs_only_counted_sets.append(ach)
+            if ach.earned:
+                achs_unlocked += 1
+
+def save_set_options():
+    saved_keys = ['display', 'count', 'prefix_name', 'custom_name', 'custom_order']
+    save_contents = {}
+
+    for groupid in ach_groups:
+        save_contents[groupid] = {x: ach_groups[groupid][x] for x in saved_keys}
+
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir)
+    with open(f'{save_dir}/{appid}_sets.json', 'w') as f:
+        json.dump(save_contents, f, indent=4)
+
 def draw_image_bar(x, y, w, img):
     iw = img.get_width()
     for i in range(w // iw):
@@ -157,10 +179,12 @@ def draw_game_progress(max_name_length):
     y = positions[stg['gamebar_position']]
     t = gamename
     text_color = stg['color_text']
-    if stg['color_text_complete'] != None and achs_unlocked == len(achs):
+    if stg['color_text_complete'] != None and len(achs_only_counted_sets) > 0 and achs_unlocked == len(achs_only_counted_sets):
         text_color = stg['color_text_complete']
     if header_extra == 'search' or search_request != '':
         t = f'Search: {search_request}'
+    elif viewing_set:
+        t = ach_groups[viewing_set_id]['name_l']
     if (stg['gamebar_position'] != 'repname' or header_extra[:6] == 'search') and max_name_length > 0:
         ty = 10
         if stg['gamebar_position'] in ('under', 'hide') and stg['font_size_general'] <= 22:
@@ -172,10 +196,12 @@ def draw_game_progress(max_name_length):
     if stg['gamebar_position'] == 'repname' and header_extra[:6] == 'search':
         return
 
-    draw_progressbar(10, y, stg['gamebar_length'], 13, achs_unlocked, len(achs))
-    game_progress_str = f'{achs_unlocked}/{len(achs)}'
-    if len(achs) > 0:
-        game_progress_str += f' ({achs_unlocked * 100 // len(achs)}%)'
+    draw_progressbar(10, y, stg['gamebar_length'], 13, achs_unlocked, len(achs_only_counted_sets))
+    game_progress_str = f'{achs_unlocked}/{len(achs_only_counted_sets)}'
+    if len(achs_only_counted_sets) != len(achs) and not viewing_set:
+        game_progress_str += '*'
+    if len(achs_only_counted_sets) > 0:
+        game_progress_str += f' ({achs_unlocked * 100 // len(achs_only_counted_sets)}%)'
     else:
         game_progress_str += ' (0%)'
     show_text(screen, font_general, game_progress_str, (stg['gamebar_length'] + 20, y - 2), text_color)
@@ -190,7 +216,7 @@ def draw_achs():
             screen.blit(upbutton, (stg['window_size_x'] - 96, 10))
             screen.blit(downbutton, (stg['window_size_x'] - 64, 10))
             screen.blit(listbutton, (stg['window_size_x'] - 32, 10))
-        elif header_extra == 'search_results':
+        elif header_extra in ('search_results', 'set'):
             draw_game_progress(btn_locs['filter_search'][state_filter].topleft[0] - 20)
             screen.blit(filter_buttons[state_filter], btn_locs['filter_search'][state_filter])
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
@@ -214,15 +240,15 @@ def draw_achs():
             screen.blit(revealbutton[reveal_secrets], (stg['window_size_x'] - 64, 10))
             screen.blit(xbutton, (stg['window_size_x'] - 32, 10))
         else:
+            draw_game_progress(btn_locs['sets'][state_filter].topleft[0] - 20)
             if stg['history_length'] > -1:
-                draw_game_progress(btn_locs['history'][state_filter].topleft[0] - 20)
                 screen.blit(historybutton, btn_locs['history'][state_filter])
                 if len(history) > 0 and history[0]['unread'] == 1:
                     screen.blit(unreadicon, (btn_locs['filter'][state_filter].topleft[0] - 18, 24))
-            else:
-                draw_game_progress(btn_locs['filter'][state_filter].topleft[0] - 20)
             screen.blit(filter_buttons[state_filter], btn_locs['filter'][state_filter])
             screen.blit(statsbutton, btn_locs['stats'])
+            if len(ach_groups) > 0:
+                screen.blit(setsbutton, btn_locs['sets'][state_filter])
     if viewing == 'history_unlocks':
         # draw_game_progress(stg['window_size_x'] - 182)
         draw_game_progress(btn_locs['back'].topleft[0] - 20)
@@ -299,14 +325,26 @@ def draw_achs():
             if stg['achbg_rarity_relative']:
                 max_val = max_rarity
             length = stg['window_size_x'] - 84 - stg['frame_size']
+            frame_height = stg['frame_size']
+            if stg['achbg_frame_height'] != None:
+                frame_height = stg['achbg_frame_height']
             if (stg['achbg_rarity'] == 'yes' or (stg['achbg_rarity'] == 'sort' and stg['sort_by_rarity'] and viewing == 'achs')) and achs_f[i].rarity != -1.0:
                 length = achs_f[i].rarity * (stg['window_size_x'] - 84 - stg['frame_size']) / max_val
-            pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll) * 74 - stg['frame_size'], length, 64 + stg['frame_size'] * 2))
+            pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll) * 74 - frame_height, length, 64 + frame_height * 2))
 
         if stg['secrets_listhide'] and not can_show_desc:
             long_text(screen, stg['window_size_x'] - 94, font_regular, stg['hidden_title'], (84, header_h + (i - scroll) * 74), ach_text_color)
         else:
-            long_text(screen, stg['window_size_x'] - 94, font_regular, achs_f[i].display_name_l, (84, header_h + (i - scroll) * 74), ach_text_color)
+            ach_name = achs_f[i].display_name_l
+            if not viewing_set and achs_f[i].groupid in ach_groups and ach_groups[achs_f[i].groupid]['prefix_name']:
+                prefix = ach_groups[achs_f[i].groupid]['name_l']
+                if ach_groups[achs_f[i].groupid]['custom_name'] != None:
+                    prefix = ach_groups[achs_f[i].groupid]['custom_name']
+                ach_name = '[' + prefix + '] ' + achs_f[i].display_name_np
+                if stg['unlockrates'] == 'name':
+                    ach_name = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[achs_f[i].language].size(achs_f[i].rarity_text)[0], font_achs_regular[achs_f[i].language], ach_name, None, (0, 0, 0), True)
+                    ach_name += achs_f[i].rarity_text
+            long_text(screen, stg['window_size_x'] - 94, font_regular, ach_name, (84, header_h + (i - scroll) * 74), ach_text_color)
         if not can_show_desc:
             multiline_text(screen, desc_max_lines, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_small, stg['hidden_desc'], (84, header_h + 17 + (i - scroll) * 74), ach_text_color)
         elif achs_f[i].has_desc:
@@ -503,9 +541,12 @@ def draw_history():
             if stg['achbg_rarity_relative']:
                 max_val = max_rarity
             length = stg['window_size_x'] - 84 - stg['frame_size']
+            frame_height = stg['frame_size']
+            if stg['achbg_frame_height'] != None:
+                frame_height = stg['achbg_frame_height']
             if stg['achbg_rarity'] == 'yes' and 'ach' in history[i] and history[i]['ach'].rarity != -1.0:
                 length = history[i]['ach'].rarity * (stg['window_size_x'] - 84 - stg['frame_size']) / max_val
-            pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll_history) * 74 - stg['frame_size'], length, 64 + stg['frame_size'] * 2))
+            pygame.draw.rect(screen, achbg_color, pygame.Rect(74 + stg['frame_size'], header_h + (i - scroll_history) * 74 - frame_height, length, 64 + frame_height * 2))
         if stg['frame_size'] > 0:
             pygame.draw.rect(screen, frame_color, pygame.Rect(10 - stg['frame_size'], header_h - stg['frame_size'] + (i - scroll_history) * 74, 64 + stg['frame_size'] * 2, 64 + stg['frame_size'] * 2))
         
@@ -600,14 +641,107 @@ def draw_history():
 
     pygame.display.flip()
 
+def draw_sets():
+    screen.fill(stg['color_background'])
+
+    if len(ach_groups) > sets_to_show:
+        draw_game_progress(stg['window_size_x'] - 148)
+        if not renaming_set:
+            screen.blit(leftbutton, btn_locs['prevsetpage'][stg['order_by_set']])
+            screen.blit(rightbutton, btn_locs['nextsetpage'][stg['order_by_set']])
+    else:
+        draw_game_progress(stg['window_size_x'] - 116)
+    if not renaming_set:
+        screen.blit(setsortbutton[stg['order_by_set']], btn_locs['setsort'][stg['order_by_set']])
+        screen.blit(backbutton, btn_locs['back'])
+
+    already_shown = 0 - (sets_page - 1) * sets_to_show
+    for groupid in ordered_groups:
+        if already_shown < 0:
+            already_shown += 1
+            continue
+        group = ach_groups[groupid]
+        text_color = stg['color_text']
+        if stg['color_text_complete'] != None and group['achs'] > 0 and group['unlocks'] == group['achs']:
+            text_color = stg['color_text_complete']
+
+        y_name = header_h + already_shown * 43
+        y_bar = header_h + 20 + already_shown * 43
+        y_ptext = header_h + 18 + already_shown * 43
+        if stg['gamebar_position'] == 'under':
+            y_name += 12 * already_shown
+            y_bar += 12 * (1 + already_shown)
+            y_ptext += 12 * (1 + already_shown)
+
+        name_text = group['name_l']
+        if group['dlcappid'] != None:
+            name_text = '[DLC] ' + name_text
+        if renaming_set and renaming_set_id == groupid:
+            name_text = renaming_set_input
+        long_text(screen, stg['window_size_x'] - 20, font_general, name_text, (10, y_name), text_color)
+
+        draw_progressbar(10, y_bar, stg['gamebar_length'], 13, group['unlocks'], group['achs'])
+        set_progress_str = f"{group['unlocks']}/{group['achs']}"
+        if group['achs'] > 0:
+            set_progress_str += f" ({group['unlocks'] * 100 // group['achs']}%)"
+        else:
+            set_progress_str += ' (0%)'
+
+        if len(cmp_data) > 0 and group['achs'] > 0 and cmp_stg['unlock_lb']:
+            set_progress_str += cmp_set_unlock_lb_short(groupid)
+            ucounts = [cmp_data[x]['group_unlocks'].get(groupid, 0) for x in cmp_data]
+            best = max(ucounts)
+            if best > group['unlocks']:
+                closest = 0
+                ucounts.sort()
+                for i in ucounts:
+                    closest = i
+                    if i > group['unlocks']: break
+                draw_start = (group['unlocks'] * stg['gamebar_length'] // group['achs'])
+                closest_px = (closest * stg['gamebar_length'] // group['achs']) - draw_start
+                best_px = (best * stg['gamebar_length'] // group['achs']) - draw_start
+                if stg['exp_cmp_color_bar_best'] != None:
+                    pygame.draw.rect(screen, stg['exp_cmp_color_bar_best'], pygame.Rect(10 + draw_start, y_bar, best_px, 13))
+                if stg['exp_cmp_color_bar_next'] != None:
+                    pygame.draw.rect(screen, stg['exp_cmp_color_bar_next'], pygame.Rect(10 + draw_start, y_bar, closest_px, 13))
+
+        show_text(screen, font_general, set_progress_str, (stg['gamebar_length'] + 20, y_ptext), text_color)
+
+        if not renaming_set:
+            screen.blit(viewsetbutton, (stg['window_size_x'] - 160, y_name))
+            if group['display']:
+                screen.blit(listbutton, (stg['window_size_x'] - 128, y_name))
+            elif group['count']:
+                screen.blit(listdisabledbutton, (stg['window_size_x'] - 128, y_name))
+            else:
+                screen.blit(xbutton, (stg['window_size_x'] - 128, y_name))
+            screen.blit(setprefixbutton[group['prefix_name']], (stg['window_size_x'] - 96, y_name))
+            screen.blit(upbutton, (stg['window_size_x'] - 64, y_name))
+            screen.blit(downbutton, (stg['window_size_x'] - 32, y_name))
+        elif renaming_set_id == groupid:
+            screen.blit(setprefixbutton[group['prefix_name']], (stg['window_size_x'] - 96, y_name))
+
+        already_shown += 1
+        if already_shown == sets_to_show:
+            break
+
+    pygame.display.flip()
+
 def ach_dumper():
+    if viewing == 'sets':
+        return
+
     dump_time = datetime.now()
 
     text = appid
     if gamename != appid:
         text += ' - ' + gamename
     text += ' | ' + dump_time.strftime(stg_ad['strftime'])
-    text += f'\nUnlocked: {achs_unlocked}/{len(achs)}'
+    if viewing_set:
+        text += '\nSet: ' + ach_groups[viewing_set_id]['name_l']
+    text += f'\nUnlocked: {achs_unlocked}/{len(achs_only_counted_sets)}'
+    if len(achs_only_counted_sets) != len(achs) and not viewing_set:
+        text += '*'
     if viewing == 'history':
         text += ' (History)'
     elif viewing == 'history_unlocks' or state_filter == 1:
@@ -617,12 +751,16 @@ def ach_dumper():
     if viewing == 'history_unlocks':
         text += ' [T↓]'
     else:
+        if stg['order_by_set'] == 'first':
+            text += ' [S↓]'
         if stg['sort_by_rarity']:
             text += ' [%↓]'
         if stg['unlocks_on_top']:
             text += ' [U↑]'
         if stg['unlocks_timesort']:
             text += ' [T↓]'
+        if stg['order_by_set'] == 'last':
+            text += ' [S↓]'
         if header_extra == 'search_results':
             text += '\nSearch: ' + search_request
 
@@ -634,18 +772,22 @@ def ach_dumper():
 
             can_show_desc = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets
 
+            text += '\n\n'
             if stg_ad['secrets_listhide'] and not can_show_desc:
-                text += '\n\n' + stg_ad['hidden_title']
+                text += stg_ad['hidden_title']
             else:
-                text += '\n\n' + a.display_name_np
+                if not viewing_set and a.groupid in ach_groups and ach_groups[a.groupid]['prefix_name']:
+                    prefix = ach_groups[a.groupid]['name_l']
+                    if ach_groups[a.groupid]['custom_name'] != None:
+                        prefix = ach_groups[a.groupid]['custom_name']
+                    text += '[' + prefix + '] '
+                text += a.display_name_np
                 if stg_ad['unlockrates'] == 'name':
                     text += a.rarity_text
 
             if can_show_desc:
                 if a.has_desc:
-                    d = a.description_l
-                    if stg['unlockrates'] == 'desc' and a.rarity != -1.0:
-                        d = d[: -len(a.rarity_text)]
+                    d = a.description_np
                     if stg_ad['unlockrates'] == 'desc' and a.rarity != 1.0:
                         d += a.rarity_text
                     text += '\n' + d
@@ -666,6 +808,13 @@ def ach_dumper():
                 if a.earned:
                     val = a.progress.max_val
                 text += f' ({val}/{a.progress.max_val})'
+
+        hidden_by_set = sum([g['achs'] for g in ach_groups.values() if not g['display']])
+        if hidden_by_set > 0:
+            if hidden_by_set == 1:
+                text += '\n\nThere is 1 more achievement from a set that was hidden'
+            else:
+                text += f'\n\nThere are {hidden_by_set} more achievements from sets that were hidden'
     elif viewing == 'history':
         prefixes = {'unlock': 'Unlocked: ', 'lock': 'Locked: ', 'progress_report': 'Progress: '}
         for h in history:
@@ -680,18 +829,16 @@ def ach_dumper():
                 if h['type'] == 'progress_report':
                     text += f" ({h['value'][0]}/{h['value'][1]})"
                 elif stg_ad['unlockrates'] == 'name':
-                    text += a.rarity_text
+                    text += h['ach'].rarity_text
                 if not h['ach'].hidden or (h['type'] == 'unlock' and not hide_all_secrets) or reveal_secrets:
                     if h['ach'].has_desc:
-                        d = h['ach'].description_l
-                        if stg['unlockrates'] == 'desc' and h['ach'].rarity != -1.0:
-                            d = d[: -len(h['ach'].rarity_text)]
+                        d = h['ach'].description_np
                         if stg_ad['unlockrates'] == 'desc' and h['ach'].rarity != 1.0:
                             d += h['ach'].rarity_text
                         text += '\n' + d
                 elif len(stg_ad['hidden_desc']) > 0:
                     text += '\n' + stg_ad['hidden_desc']
-            text += '\n[' + h['time_' + stg['history_time']] + ']'
+            text += '\n[' + h['time_' + stg_ad['history_time']] + ']'
     elif viewing == 'stats' and len(stats) > 0:
         text += '\n'
         for s in stats:
@@ -712,6 +859,10 @@ def ach_dumper():
         os.makedirs('ach_dumper')
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(text)
+
+    if stg_ad['ach_dumper_open']:
+        import webbrowser
+        webbrowser.open(os.path.abspath(filename))
 
 if len(sys.argv) > 1:
     appid, achdata_source, source_extra = load_game(sys.argv[1:4], True)
@@ -741,6 +892,8 @@ if stg['gamebar_length'] == 0:
     stg['gamebar_length'] = -10
 if stg['frame_size'] > 5:
     stg['frame_size'] = 5
+if stg['achbg_frame_height'] != None and stg['achbg_frame_height'] > 5:
+    stg['achbg_frame_height'] = 5
 if stg['frame_color_rare'] == None:
     stg['frame_color_rare'] = stg['frame_color_unlock']
 if stg['frame_color_rare_lock'] == None:
@@ -839,6 +992,12 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}') and (s
             if i_count != i_expected_count:
                 download_icons = True
             shutil.move(cfg_path, f'games/{appid}')
+            backup_dir_locations = ['.', os.path.dirname(stg['generator_path'])]
+            for d in backup_dir_locations:
+                schema_path = os.path.join(d, f'backup/{appid}/UserGameStatsSchema_{appid}.bin')
+                if os.path.isfile(schema_path):
+                    shutil.move(schema_path, f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+                    break
         generator_cleanup()
 
     if not os.path.isdir(f'games/{appid}'):
@@ -855,6 +1014,12 @@ if len(stg['generator_path']) > 0 and not os.path.isdir(f'games/{appid}') and (s
             elif os.path.isdir(f'output/{appid}/steam_settings'):
                 cfg_path = f'output/{appid}/steam_settings'
             shutil.move(cfg_path, f'games/{appid}')
+            backup_dir_locations = ['.', os.path.dirname(stg['generator_path'])]
+            for d in backup_dir_locations:
+                schema_path = os.path.join(d, f'backup/{appid}/UserGameStatsSchema_{appid}.bin')
+                if os.path.isfile(schema_path):
+                    shutil.move(schema_path, f'games/{appid}/UserGameStatsSchema_{appid}.bin')
+                    break
         else:
             print('An error occurred. Press ENTER and restart to check if this config can be used or write anything to remove it')
             if input() == '':
@@ -959,17 +1124,27 @@ achs_to_show = (stg['window_size_y'] - header_h + 10) // 74
 if stg['window_size_y'] - header_h + 10 < achs_to_show * 74 + stg['frame_size'] and achs_to_show > 1:
     achs_to_show -= 1
 stats_to_show = (stg['window_size_y'] - header_h) // stg['font_line_distance_regular']
+px_per_set = 43
+if stg['gamebar_position'] == 'under':
+    px_per_set += 12
+sets_to_show = (stg['window_size_y'] - header_h + 10) // px_per_set
 
 viewing = 'achs'
 scroll = 0
 scroll_stats = 0
 scroll_history = 0
+sets_page = 1
 state_filter = 0
 history = []
 header_extra = ''
 search_request = ''
 reveal_secrets = False
 hide_all_secrets = False
+viewing_set = False
+viewing_set_id = None
+renaming_set = False
+renaming_set_id = None
+renaming_set_input = ''
 
 def load_image(name):
     for i in stg['images']:
@@ -1018,17 +1193,31 @@ hiddenunlockicon = load_image('hidden_unlock.png')
 barimagebg = load_image('bar_bg.png')
 barimagefill = load_image('bar_fill.png')
 barimagecompleted = load_image('bar_completed.png')
+setsbutton = load_image('sets.png')
+leftbutton = load_image('left.png')
+rightbutton = load_image('right.png')
+setsortbutton = {'none': load_image('sort_sets0.png'), 'first': load_image('sort_sets1.png'), 'last': load_image('sort_sets2.png')}
+listdisabledbutton = load_image('list_disabled.png')
+setprefixbutton = {False: load_image('set_prefix0.png'), True: load_image('set_prefix1.png')}
+viewsetbutton = load_image('viewset.png')
 
 btn_locs = {}
 btn_locs['stats'] = button_location(statsbutton)
 btn_locs['filter'] = [button_location(i, btn_locs['stats']) for i in filter_buttons]
 btn_locs['history'] = [button_location(historybutton, i) for i in btn_locs['filter']]
+if stg['history_length'] > -1:
+    btn_locs['sets'] = [button_location(setsbutton, i) for i in btn_locs['history']]
+else:
+    btn_locs['sets'] = [button_location(setsbutton, i) for i in btn_locs['filter']]
 btn_locs['achs'] = button_location(achsbutton)
 btn_locs['back'] = button_location(backbutton)
 btn_locs['clear'] = button_location(clearbutton, btn_locs['back'])
 btn_locs['history_unlocks'] = button_location(unlocksbutton, btn_locs['clear'])
 search_results_x_rect = pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22)
 btn_locs['filter_search'] = [button_location(i, search_results_x_rect) for i in filter_buttons]
+btn_locs['setsort'] = {x: button_location(setsortbutton[x], btn_locs['back']) for x in setsortbutton}
+btn_locs['nextsetpage'] = {x: button_location(rightbutton, btn_locs['setsort'][x]) for x in setsortbutton}
+btn_locs['prevsetpage'] = {x: button_location(leftbutton, btn_locs['nextsetpage'][x]) for x in setsortbutton}
 
 def load_sound(name):
     vol = 1.0
@@ -1059,6 +1248,39 @@ schema_as_config = os.path.isfile(f'games/{appid}/UserGameStatsSchema_{appid}.bi
 if schema_as_config:
     with open(f'games/{appid}/UserGameStatsSchema_{appid}.bin', 'rb') as f:
         data_from_schema = process_schema(appid, vdf.binary_loads(f.read()))
+
+ach_groups = {}
+if os.path.isfile(f'{save_dir}/{appid}_sets.json'):
+    with open(f'{save_dir}/{appid}_sets.json') as f:
+        saved_set_options = json.load(f)
+    if 'null' in saved_set_options:
+        saved_set_options[None] = saved_set_options.pop('null')
+if schema_as_config:
+    max_order = -1
+    for groupid in data_from_schema['groups']:
+        group = data_from_schema['groups'][groupid]
+        ach_groups[groupid] = {}
+        ach_groups[groupid]['name'] = group['name']
+        ach_groups[groupid]['custom_name'] = None
+        ach_groups[groupid]['prefix_name'] = groupid != None
+        ach_groups[groupid]['dlcappid'] = group['dlcappid']
+        ach_groups[groupid]['order'] = group['order']
+        ach_groups[groupid]['custom_order'] = group['order']
+        ach_groups[groupid]['display'] = True
+        ach_groups[groupid]['count'] = True
+        if group['order'] != None:
+            max_order = max(max_order, group['order'])
+    for groupid in ach_groups:
+        group = ach_groups[groupid]
+        if group['custom_order'] == None:
+            max_order += 1
+            group['custom_order'] = max_order
+        if groupid in saved_set_options:
+            ach_groups[groupid].update(saved_set_options[groupid])
+        group['language'], group['name_l'] = Achievement.pick_language(group['name'], stg)
+        group['achs'] = 0
+        group['unlocks'] = 0
+ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
 
 achs_json = []
 if not schema_as_config:
@@ -1247,8 +1469,10 @@ if stg['save_timestamps']:
 
 config_from_fork = not schema_as_config and os.path.isdir(f'games/{appid}/img')
 icons_path = f'games/{appid}/achievement_images'
-if config_from_fork:
+if config_from_fork or (schema_as_config and not os.path.isdir(icons_path)):
     icons_path = f'games/{appid}/img'
+
+achs_only_counted_sets = []
 
 fu_change = False
 ts_change = False
@@ -1287,8 +1511,15 @@ for i in range(len(achs)):
         force_unlocks[achs[i].name] = achs[i].earned_time
         fu_change = True
 
-    if achs[i].earned:
-        achs_unlocked += 1
+    if not achs[i].groupid in ach_groups or ach_groups[achs[i].groupid]['count']:
+        achs_only_counted_sets.append(achs[i])
+        if achs[i].earned:
+            achs_unlocked += 1
+
+    if achs[i].groupid in ach_groups:
+        ach_groups[achs[i].groupid]['achs'] += 1
+        if achs[i].earned:
+            ach_groups[achs[i].groupid]['unlocks'] += 1
 
     if achs[i].name in saved_tstamps:
         if not stg['savetime_keep_locked'] and not achs[i].earned:
@@ -1361,8 +1592,11 @@ if len(missing_icons) > 0:
     if download_icons:
         if not os.path.isdir(icons_path):
             os.makedirs(icons_path)
-        base_urls =  ['https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/',
-                      'https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/']
+        base_urls = []
+        cdns = [".fastly", ".cloudflare", ".akamai", ""]
+        for cdn in cdns:
+            base_urls.append(f"https://shared{cdn}.steamstatic.com/community_assets/images/apps/")
+            base_urls.append(f"https://cdn{cdn}.steamstatic.com/steamcommunity/public/images/apps/")
         done = 0
         total = len(missing_icons)
         skipped = 0
@@ -1377,6 +1611,8 @@ if len(missing_icons) > 0:
                     try:
                         urllib.request.urlretrieve(url, os.path.join(icons_path, i))
                         success = True
+                        base_urls.remove(u)
+                        base_urls.insert(0, u) # Try this URL first for next icons
                         break
                     except Exception as ex:
                         pass
@@ -1464,15 +1700,14 @@ for l in languages_used:
         sys.exit()
 
 for ach in achs:
+    if ach.rarity != -1.0:
+        if stg['unlockrates'] == 'name':
+            ach.display_name_l = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[ach.language].size(ach.rarity_text)[0], font_achs_regular[ach.language], ach.display_name_l, None, (0, 0, 0), True)
+            ach.display_name_l += ach.rarity_text
+        elif stg['unlockrates'] == 'desc' and ach.has_desc:
+            ach.description_l += ach.rarity_text
     if ach.has_desc:
         ach.long_desc = multiline_text(None, 2, stg['font_line_distance_small'], stg['window_size_x'] - 94, font_achs_small[ach.language_d], ach.description_l, None, (0, 0, 0), True)
-    if ach.rarity == -1.0:
-        continue
-    if stg['unlockrates'] == 'name':
-        ach.display_name_l = long_text(None, stg['window_size_x'] - 94 - font_achs_regular[ach.language].size(ach.rarity_text)[0], font_achs_regular[ach.language], ach.display_name_l, None, (0, 0, 0), True)
-        ach.display_name_l += ach.rarity_text
-    elif stg['unlockrates'] == 'desc' and ach.has_desc:
-        ach.description_l += ach.rarity_text
 
 force_progress = {}
 if os.path.isfile(f'games/{appid}/force_progress.txt'):
@@ -1534,7 +1769,7 @@ if os.path.isfile(f'games/{appid}/force_progress.txt'):
     for st in force_progress:
         force_progress[st].sort(key=lambda x : x['max'])
 
-achs_f = filter_achs(achs, state_filter, stg)
+achs_f = filter_achs(achs, state_filter, stg, ach_groups)
 
 hover_ach = None
 running = True
@@ -1585,12 +1820,8 @@ def check_search_match(ach, rq):
     rq = rq.lower()
     if rq in ach.display_name_np.lower():
         return True
-    if ach.has_desc and can_show_desc:
-        d = ach.description_l
-        if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
-            d = d[: -len(ach.rarity_text)]
-        if rq in d.lower():
-            return True
+    if ach.has_desc and can_show_desc and rq in ach.description_np.lower():
+        return True
     return False
 
 notif_names = {'unlock': 'Achievement Unlocked!', 'lock': 'Achievement Locked',
@@ -1626,7 +1857,7 @@ def create_notification(t, change):
 
     if stg['sound']:
         if t == 'unlock':
-            if achs_unlocked == len(achs) and sounds[5] != None:
+            if achs_unlocked == len(achs_only_counted_sets) and sounds[5] != None:
                 pick_sound(5)
             elif ach.rare and sounds[3] != None:
                 pick_sound(3)
@@ -1656,15 +1887,13 @@ def create_notification(t, change):
 
         if 'ach' in h and stg['notif_desc'] and t != 'lock' and ach.has_desc and (not ach.hidden or (ach.earned and not hide_all_secrets) or reveal_secrets):
             title = message
-            message = ach.description_l
-            if stg['unlockrates'] == 'desc' and ach.rarity != -1.0:
-                message = message[: -len(ach.rarity_text)]
+            message = ach.description_np
 
         if t == 'unlock' and stg['notif_unlock_count']:
-            title = f'[{achs_unlocked}/{len(achs)}] ' + title
+            title = f'[{achs_unlocked}/{len(achs_only_counted_sets)}] ' + title
 
         if len(title) > 64:
-            title = title[:61]
+            title = title[:61] + '...'
         if len(message) > 256:
             message = message[:253] + '...'
 
@@ -1764,12 +1993,20 @@ while running:
                         force_unlocks.pop(change['ach_api'], None)
                         fu_change = True
                         continue
-                    achs_unlocked += 1
+                    if not change['ach_obj'].groupid in ach_groups or ach_groups[change['ach_obj'].groupid]['count']:
+                        achs_unlocked += 1
+                    if change['ach_obj'].groupid in ach_groups:
+                        ach_groups[change['ach_obj'].groupid]['unlocks'] += 1
                     create_notification('unlock', change)
                 elif change['type'] == 'lock':
-                    achs_unlocked -= 1
+                    if not change['ach_obj'].groupid in ach_groups or ach_groups[change['ach_obj'].groupid]['count']:
+                        achs_unlocked -= 1
+                    if change['ach_obj'].groupid in ach_groups:
+                        ach_groups[change['ach_obj'].groupid]['unlocks'] -= 1
                     if change['lock_all']:
                         achs_unlocked = 0
+                        for group in ach_groups.values():
+                            group['unlocks'] = 0
                     if stg['notif_lock']:
                         if not change['lock_all']:
                             create_notification('lock', change)
@@ -1843,7 +2080,10 @@ while running:
                                 force_unlocks[ach.name] = ach.earned_time
                                 fu_change = True
                                 filter_needed = True
-                                achs_unlocked += 1
+                                if not ach.groupid in ach_groups or ach_groups[ach.groupid]['count']:
+                                    achs_unlocked += 1
+                                if ach.groupid in ach_groups:
+                                    ach_groups[ach.groupid]['unlocks'] += 1
                                 time_real = datetime.now().strftime(stg['strftime'])
                                 time_action = datetime.fromtimestamp(get_stat_last_change(ach.progress.value['operand1']))
                                 time_action = time_action.strftime(stg['strftime'])
@@ -1863,7 +2103,10 @@ while running:
                                     ach.ts_first = None
                                     ach.ts_earliest = None
                                     ts_change.add(ach.name)
-                                achs_unlocked -= 1
+                                if not ach.groupid in ach_groups or ach_groups[ach.groupid]['count']:
+                                    achs_unlocked -= 1
+                                if ach.groupid in ach_groups:
+                                    ach_groups[ach.groupid]['unlocks'] -= 1
                                 if stg['notif_lock']:
                                     time_real = datetime.now().strftime(stg['strftime'])
                                     time_action = datetime.fromtimestamp(get_stat_last_change(ach.progress.value['operand1']))
@@ -1920,12 +2163,13 @@ while running:
             if header_extra == 'search':
                 keys = pygame.key.get_pressed()
                 if event.key == pygame.K_RETURN:
-                    scroll_achs_copy = scroll
-                    state_filter_copy = state_filter
-                    scroll = 0
-                    state_filter = 0
-                    header_extra = 'search_results'
-                    filter_needed = True
+                    if search_request != '':
+                        scroll_achs_copy = scroll
+                        state_filter_copy = state_filter
+                        scroll = 0
+                        state_filter = 0
+                        header_extra = 'search_results'
+                        filter_needed = True
                 elif event.key == pygame.K_BACKSPACE:
                     search_request = search_request[:-1]
                     if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -1934,6 +2178,17 @@ while running:
                     search_request += pyperclip.paste()
                 else:
                     search_request += event.unicode
+                flip_required = True
+            elif renaming_set:
+                keys = pygame.key.get_pressed()
+                if event.key == pygame.K_BACKSPACE:
+                    renaming_set_input = renaming_set_input[:-1]
+                    if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                        renaming_set_input = ''
+                elif event.key == pygame.K_v and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    renaming_set_input += pyperclip.paste()
+                else:
+                    renaming_set_input += event.unicode
                 flip_required = True
             if event.key == pygame.K_DOWN:
                 if viewing in ('achs', 'history_unlocks'):
@@ -1986,6 +2241,7 @@ while running:
             elif event.key == pygame.K_f and viewing == 'achs' and header_extra[:6] != 'search' and search_request == '':
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                    header_extra_before_search = header_extra
                     header_extra = 'search'
                     flip_required = True
             elif event.key == pygame.K_d:
@@ -2022,6 +2278,8 @@ while running:
                         command += ' -r' * stg['sort_by_rarity']
                         command += ' -uot' * stg['unlocks_on_top']
                         command += ' -t' * stg['unlocks_timesort']
+                        if stg['order_by_set'] != 'none':
+                            command += ' -ss' + stg['order_by_set'][0]
                     command += ' -s' + stg['secrets'][0]
                     command += ' -h' * hide_all_secrets
                     command += ' -lh' * stg['secrets_listhide']
@@ -2037,7 +2295,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.7.1')
+                print(' - Version: v1.8.0')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -2056,17 +2314,18 @@ while running:
             if event.button == 3:
                 if viewing == 'achs':
                     if ((header_extra == '' and btn_locs['filter'][state_filter].collidepoint(event.pos)) or \
-                       (header_extra == 'search_results' and btn_locs['filter_search'][state_filter].collidepoint(event.pos))):
+                       (header_extra in ('search_results', 'set') and btn_locs['filter_search'][state_filter].collidepoint(event.pos))):
+                        header_extra_before_sort = header_extra
                         header_extra = 'sort'
                     elif header_extra == 'sort' and pygame.Rect(stg['window_size_x'] - 160, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'secrets_reveal'
                 elif viewing == 'history':
                     if hover_ach != None and scroll_history + hover_ach < len(history) and 'ach' in history[scroll_history + hover_ach]:
                         ach = history[scroll_history + hover_ach]['ach']
-                        if not (stg['secrets'] == 'hide' and ach.hidden) or ach.earned:
+                        if (not (stg['secrets'] == 'hide' and ach.hidden) or ach.earned) and not (a.groupid in ach_groups and not ach_groups[a.groupid]['display']):
                             if state_filter != 0:
                                 state_filter = 0
-                                achs_f = filter_achs(achs, state_filter, stg)
+                                achs_f = filter_achs(achs, state_filter, stg, ach_groups)
                             scroll_history = 0
                             viewing = 'achs'
                             for entry in history:
@@ -2077,14 +2336,14 @@ while running:
                                 if achs_f[i].name == ach.name:
                                     scroll = i
                                     break
-            if event.button != 1:
+            if event.button != 1 and viewing != 'sets':
                 continue
 
             if viewing == 'achs':
                 if header_extra == 'search':
                     if pygame.Rect(stg['window_size_x'] - 128, 10, 22, 22).collidepoint(event.pos):
                         search_request = ''
-                        header_extra = ''
+                        header_extra = header_extra_before_search
                     elif search_request == '':
                         pass
                     elif pygame.Rect(stg['window_size_x'] - 96, 10, 22, 22).collidepoint(event.pos):
@@ -2104,7 +2363,7 @@ while running:
                         state_filter = 0
                         header_extra = 'search_results'
                         filter_needed = True
-                elif header_extra == 'search_results':
+                elif header_extra in ('search_results', 'set'):
                     if btn_locs['filter_search'][state_filter].collidepoint(event.pos):
                         state_filter += 1
                         if state_filter > 2:
@@ -2112,11 +2371,23 @@ while running:
                         filter_needed = True
                         scroll = 0
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
-                        search_request = ''
-                        header_extra = ''
+                        if header_extra == 'set':
+                            ach_groups[viewing_set_id]['display'] = group_display_before_setview
+                            for g in ach_groups:
+                                ach_groups[g]['count'] = group_count_before_setview[g]
+                            recalculate_ach_counts()
+                            viewing = 'sets'
+                            viewing_set = False
+                            viewing_set_id = None
+                            state_filter = state_filter_copy_setview
+                            scroll = scroll_achs_copy_setview
+                            header_extra = ''
+                        else:
+                            state_filter = state_filter_copy
+                            scroll = scroll_achs_copy
+                            header_extra = header_extra_before_search
+                            search_request = ''
                         filter_needed = True
-                        state_filter = state_filter_copy
-                        scroll = scroll_achs_copy
                 elif header_extra == 'sort':
                     if pygame.Rect(stg['window_size_x'] - 160, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'secrets'
@@ -2130,10 +2401,7 @@ while running:
                         stg['unlocks_timesort'] = not stg['unlocks_timesort']
                         filter_needed = True
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
-                        if search_request == '':
-                            header_extra = ''
-                        else:
-                            header_extra = 'search_results'
+                        header_extra = header_extra_before_sort
                 elif header_extra == 'secrets':
                     if pygame.Rect(stg['window_size_x'] - 160, 10, 22, 22).collidepoint(event.pos):
                         stg['secrets_listhide'] = not stg['secrets_listhide']
@@ -2161,7 +2429,9 @@ while running:
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'sort'
                 else:
-                    if btn_locs['filter'][state_filter].collidepoint(event.pos):
+                    if btn_locs['sets'][state_filter].collidepoint(event.pos):
+                        viewing = 'sets'
+                    elif btn_locs['filter'][state_filter].collidepoint(event.pos):
                         state_filter += 1
                         if state_filter > 2:
                             state_filter = 0
@@ -2238,6 +2508,235 @@ while running:
                     # scroll = scroll_achs_copy
                     # achs_f, secrets_hidden = filter_achs(achs, state_filter, stg)
                     # viewing = 'history'
+            elif viewing == 'sets':
+                if renaming_set:
+                    px_per_set = 43
+                    if stg['gamebar_position'] == 'under':
+                        px_per_set += 12
+                    renamed_i = ordered_groups.index(renaming_set_id) - (sets_page - 1) * sets_to_show
+                    if event.button == 1 and pygame.Rect(stg['window_size_x'] - 96, header_h + renamed_i * px_per_set, 22, 22).collidepoint(event.pos):
+                        keys = pygame.key.get_pressed()
+                        group = ach_groups[renaming_set_id]
+                        if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT], keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                            include_non_dlc = 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL])
+                            for group in ach_groups.values():
+                                if not include_non_dlc and group['dlcappid'] == None:
+                                    continue
+                                group['custom_name'] = renaming_set_input
+                                if group['custom_name'] == '':
+                                    group['custom_name'] = None
+                        else:
+                            group['custom_name'] = renaming_set_input
+                            if group['custom_name'] == '':
+                                group['custom_name'] = None
+                        renaming_set = False
+                        renaming_set_id = None
+                        renaming_set_input = ''
+                        save_set_options()
+                    continue
+
+                if event.button == 1 and btn_locs['prevsetpage'][stg['order_by_set']].collidepoint(event.pos) and len(ach_groups) > sets_to_show:
+                    sets_page -= 1
+                elif event.button == 1 and btn_locs['nextsetpage'][stg['order_by_set']].collidepoint(event.pos) and len(ach_groups) > sets_to_show:
+                    sets_page += 1
+                elif event.button == 1 and btn_locs['setsort'][stg['order_by_set']].collidepoint(event.pos):
+                    if stg['order_by_set'] == 'none':
+                        stg['order_by_set'] = 'first'
+                    elif stg['order_by_set'] == 'first':
+                        stg['order_by_set'] = 'last'
+                    elif stg['order_by_set'] == 'last':
+                        stg['order_by_set'] = 'none'
+                    filter_needed = True
+                elif event.button == 1 and btn_locs['back'].collidepoint(event.pos):
+                    viewing = 'achs'
+                else:
+                    px_per_set = 43
+                    if stg['gamebar_position'] == 'under':
+                        px_per_set += 12
+                    for i in range(sets_to_show):
+                        group_idx = (sets_page - 1) * sets_to_show + i
+                        if group_idx >= len(ach_groups):
+                            continue
+                        groupid = ordered_groups[group_idx]
+                        group = ach_groups[groupid]
+                        if event.button == 1 and pygame.Rect(stg['window_size_x'] - 160, header_h + i * px_per_set, 22, 22).collidepoint(event.pos):
+                            group_display_before_setview = ach_groups[groupid]['display']
+                            ach_groups[groupid]['display'] = True
+                            group_count_before_setview = {}
+                            for g in ach_groups:
+                                group_count_before_setview[g] = ach_groups[g]['count']
+                                ach_groups[g]['count'] = g == groupid
+                            recalculate_ach_counts()
+                            viewing = 'achs'
+                            header_extra = 'set'
+                            viewing_set = True
+                            viewing_set_id = groupid
+                            scroll_achs_copy_setview = scroll
+                            state_filter_copy_setview = state_filter
+                            scroll = 0
+                            state_filter = 0
+                            filter_needed = True
+                        elif pygame.Rect(stg['window_size_x'] - 128, header_h + i * px_per_set, 22, 22).collidepoint(event.pos):
+                            keys = pygame.key.get_pressed()
+                            if event.button == 1:
+                                if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT], keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                                    include_non_dlc = 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL])
+                                    need_recalc = False
+                                    new_val = False
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        if not group['display']:
+                                            new_val = True
+                                            break
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        group['display'] = new_val
+                                        filter_needed = True
+                                        if not group['count']:
+                                            group['count'] = True
+                                            need_recalc = True
+                                    if need_recalc:
+                                        recalculate_ach_counts()
+                                else:
+                                    group['display'] = not group['display']
+                                    filter_needed = True
+                                    if not group['count']:
+                                        group['count'] = True
+                                        recalculate_ach_counts()
+                                save_set_options()
+                            elif event.button == 3:
+                                if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT], keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                                    include_non_dlc = 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL])
+                                    need_recalc = False
+                                    new_val = False
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        if not group['count']:
+                                            new_val = True
+                                            break
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        group['count'] = new_val
+                                        group['display'] = group['count']
+                                        filter_needed = True
+                                        need_recalc = True
+                                    if need_recalc:
+                                        recalculate_ach_counts()
+                                else:
+                                    group['count'] = not group['count']
+                                    group['display'] = group['count']
+                                    filter_needed = True
+                                    recalculate_ach_counts()
+                                save_set_options()
+                        elif pygame.Rect(stg['window_size_x'] - 96, header_h + i * px_per_set, 22, 22).collidepoint(event.pos):
+                            keys = pygame.key.get_pressed()
+                            if event.button == 1:
+                                if 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT], keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                                    include_non_dlc = 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL])
+                                    new_val = False
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        if not group['prefix_name']:
+                                            new_val = True
+                                            break
+                                    for group in ach_groups.values():
+                                        if not include_non_dlc and group['dlcappid'] == None:
+                                            continue
+                                        group['prefix_name'] = new_val
+                                else:
+                                    group['prefix_name'] = not group['prefix_name']
+                                save_set_options()
+                            elif event.button == 3:
+                                renaming_set = True
+                                renaming_set_id = groupid
+                                renaming_set_input = ''
+                                if group['custom_name'] != None:
+                                    renaming_set_input = group['custom_name']
+                        elif pygame.Rect(stg['window_size_x'] - 64, header_h + i * px_per_set, 22, 22).collidepoint(event.pos):
+                            keys = pygame.key.get_pressed()
+                            if event.button == 3 and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                                max_order = -1
+                                for group in ach_groups.values():
+                                    group['custom_order'] = group['order']
+                                    if group['order'] != None:
+                                        max_order = max(max_order, group['order'])
+                                for group in ach_groups.values():
+                                    if group['custom_order'] == None:
+                                        max_order += 1
+                                        group['custom_order'] = max_order
+                                ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
+                                filter_needed = True
+                                save_set_options()
+                            elif event.button in (1, 3):
+                                if group_idx == 0: continue
+                                if event.button == 1:
+                                    other_groupid = ordered_groups[group_idx - 1]
+                                    other_group = ach_groups[other_groupid]
+                                    group['custom_order'], other_group['custom_order'] = other_group['custom_order'], group['custom_order']
+                                else:
+                                    for i in range(group_idx - 1, -1, -1):
+                                        other_group = ach_groups[ordered_groups[i]]
+                                        group['custom_order'], other_group['custom_order'] = other_group['custom_order'], group['custom_order']
+                                ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
+                                filter_needed = True
+                                save_set_options()
+                        elif pygame.Rect(stg['window_size_x'] - 32, header_h + i * px_per_set, 22, 22).collidepoint(event.pos):
+                            keys = pygame.key.get_pressed()
+                            if event.button == 3 and 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
+                                max_order = -1
+                                for group in ach_groups.values():
+                                    group['custom_order'] = group['order']
+                                    if group['order'] != None:
+                                        max_order = max(max_order, group['order'])
+                                for group in ach_groups.values():
+                                    if group['custom_order'] == None:
+                                        max_order += 1
+                                        group['custom_order'] = max_order
+                                ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
+                                filter_needed = True
+                                save_set_options()
+                            elif event.button in (1, 3):
+                                if group_idx == len(ach_groups) - 1: continue
+                                if event.button == 1:
+                                    other_groupid = ordered_groups[group_idx + 1]
+                                    other_group = ach_groups[other_groupid]
+                                    group['custom_order'], other_group['custom_order'] = other_group['custom_order'], group['custom_order']
+                                else:
+                                    for i in range(group_idx + 1, len(ach_groups)):
+                                        other_group = ach_groups[ordered_groups[i]]
+                                        group['custom_order'], other_group['custom_order'] = other_group['custom_order'], group['custom_order']
+                                ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
+                                filter_needed = True
+                                save_set_options()
+                        elif event.button == 1 and pygame.Rect(10, header_h + i * px_per_set, stg['window_size_x'] - 20, px_per_set - 10).collidepoint(event.pos):
+                            print()
+                            try:
+                                print(group['name_l'])
+                            except Exception as ex:
+                                print(f'Error when printing set name: {type(ex).__name__}')
+                            try:
+                                print(f' - ID: {groupid}')
+                                if group['dlcappid'] != None:
+                                    print(f" - DLC: {group['dlcappid']}")
+                                print(f" - Languages: {', '.join(group['name'])}")
+                                print(f" - Default order: {group['order']}")
+                                if group['custom_order'] != group['order']:
+                                    print(f" - Effective order: {group['custom_order']}")
+                                if group['custom_name'] != None:
+                                    print(f" - Prefix: {group['custom_name']}")
+                                if len(cmp_data) > 0:
+                                    lb = cmp_set_unlock_lb(groupid)
+                                    if len(lb) > 0:
+                                        print(' - Comparison')
+                                    for x in lb:
+                                        print(f' - - {x[0]} : {x[1]}')
+                            except Exception as ex:
+                                print(f'Error when printing set info: {type(ex).__name__}')
             if viewing in ('achs', 'history', 'history_unlocks') and hover_ach != None:
                 if viewing == 'history' and scroll_history + hover_ach < len(history) and 'ach' in history[scroll_history + hover_ach]:
                     a = history[scroll_history + hover_ach]['ach']
@@ -2251,20 +2750,23 @@ while running:
                 keys = pygame.key.get_pressed()
                 show_hidden_info = not a.hidden or (a.earned and not hide_all_secrets) or reveal_secrets or 1 in (keys[pygame.K_LSHIFT], keys[pygame.K_RSHIFT])
                 if stg['secrets_listhide'] and not show_hidden_info:
-                    if a.rarity != -1.0:
+                    if a.rarity != -1.0 or (a.groupid != None or len(ach_groups) > 0):
                         print()
                         print(stg['hidden_title'])
+                    if a.rarity != -1.0:
                         print(f' - Rarity: {a.rarity}%')
+                    if a.groupid != None or len(ach_groups) > 0:
+                        group_name = ''
+                        if a.groupid in ach_groups:
+                            group_name = ' (' + ach_groups[a.groupid]['name_l'] + ')'
+                        print(f' - Achievement set: {a.groupid}{group_name}')
                     continue
 
                 print()
                 try:
                     print(a.display_name_np)
                     if show_hidden_info and a.has_desc:
-                        d = a.description_l
-                        if stg['unlockrates'] == 'desc' and a.rarity != -1.0:
-                            d = d[: -len(a.rarity_text)]
-                        print(d)
+                        print(a.description_np)
                 except Exception as ex:
                     print(f'Error when printing name/description: {type(ex).__name__}')
 
@@ -2276,6 +2778,11 @@ while running:
                         if a.has_desc and isinstance(a.description, dict) and set(a.display_name) != set(a.description):
                             print(f" - Languages (desc): {', '.join(a.description)}")
                     print(f' - Hidden: {a.hidden}')
+                    if a.groupid != None or len(ach_groups) > 0:
+                        group_name = ''
+                        if a.groupid in ach_groups:
+                            group_name = ' (' + ach_groups[a.groupid]['name_l'] + ')'
+                        print(f' - Achievement set: {a.groupid}{group_name}')
                     if a.progress != None and 'operand1' in a.progress.value and show_hidden_info:
                         s = a.progress.value['operand1']
                         if s in stats:
@@ -2332,7 +2839,11 @@ while running:
 
     if filter_needed:
         if viewing != 'history_unlocks':
-            achs_f = filter_achs(achs, state_filter, stg)
+            if viewing_set:
+                achs_f = [ach for ach in achs if ach.groupid == viewing_set_id]
+            else:
+                achs_f = achs
+            achs_f = filter_achs(achs, state_filter, stg, ach_groups)
             if search_request != '' and header_extra != 'search':
                 results = []
                 dummy_place = -1
@@ -2356,8 +2867,8 @@ while running:
         else:
             fake_stg = {'unlockrates': 'none', 'secrets': 'normal',
                         'unlocks_on_top': False, 'unlocks_timesort': True,
-                        'savetime_shown': stg['savetime_shown']}
-            achs_f = filter_achs(achs, 1, fake_stg)
+                        'savetime_shown': stg['savetime_shown'], 'order_by_set': False}
+            achs_f = filter_achs(achs, 1, fake_stg, ach_groups)
         filter_needed = False
 
     y = pygame.mouse.get_pos()[1]
@@ -2391,6 +2902,13 @@ while running:
             scroll_history = len(history) - achs_to_show
         if scroll_history < 0:
             scroll_history = 0
+    elif viewing == 'sets':
+        max_page = len(ach_groups) / sets_to_show
+        max_page = int(max_page) + (max_page % 1 > 0)
+        if sets_page < 1:
+            sets_page = max_page
+        elif sets_page > max_page:
+            sets_page = 1
 
     while stg['history_length'] != 0 and len(history) > 0 and len(history) > stg['history_length']:
         history.pop(-1)
@@ -2402,6 +2920,8 @@ while running:
             draw_stats()
         elif viewing == 'history':
             draw_history()
+        elif viewing == 'sets':
+            draw_sets()
         flip_required = False
 
     time.sleep(stg['delay_sleep'])

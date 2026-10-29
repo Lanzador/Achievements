@@ -171,6 +171,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'unlocks_on_top': {'type': 'bool', 'default': False},
                   'unlocks_timesort': {'type': 'bool', 'default': False},
                   'sort_by_rarity': {'type': 'bool', 'default': False},
+                  'order_by_set': {'type': 'choice', 'allowed': ['none', 'first', 'last'], 'default': 'none'},
                   'bar_length': {'type': 'int', 'default': 300},
                   'bar_unlocked': {'type': 'choice', 'allowed': ['show', 'full', 'hide', 'zerolen'], 'default': 'full'},
                   'bar_hide_unsupported': {'type': 'choice', 'allowed': ['none', 'stat', 'all'], 'default': 'none'},
@@ -236,6 +237,7 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'color_achbg_hover': {'type': 'color', 'cbn': None, 'default': (64, 64, 64)},
                   'achbg_rarity': {'type': 'choice', 'allowed': ['no', 'sort', 'yes'], 'default': 'no'},
                   'achbg_rarity_relative': {'type': 'bool', 'default': False},
+                  'achbg_frame_height': {'type': 'int', 'default': None},
                   'save_timestamps': {'type': 'bool', 'default': True},
                   'savetime_shown': {'type': 'choice', 'allowed': ['normal', 'first', 'earliest'], 'default': 'first'},
                   'savetime_mark': {'type': 'bool', 'default': False},
@@ -246,13 +248,15 @@ known_settings = {'window_size_x': {'type': 'int', 'default': 800},
                   'stat_display_names': {'type': 'bool', 'default': True},
                   'generator_path': {'type': 'str', 'default': ''},
                   'generator_priority': {'type': 'bool', 'default': True},
+                  'ach_dumper_open': {'type': 'bool', 'default': True},
                   'api_key': {'type': 'str', 'default': ''}}
 
 def load_settings(appid, source, ach_dumper=False):
     settings = {}
     for sett in known_settings:
         settings[sett] = known_settings[sett]['default']
-    filenames = ['settings', f'settings_{source}', f'settings_{appid}', f'settings_{appid}_{source}']
+    filenames = ['settings', f'settings_{source}', f'../games/{appid}/settings',
+                f'settings_{appid}', f'../games/{appid}/settings_{source}', f'settings_{appid}_{source}']
     for f in filenames:
         settings = load_settings_file(settings, f + '.txt')
         if ach_dumper:

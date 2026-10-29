@@ -102,6 +102,7 @@ path_dnames = f'games/{appid}/statdisplay.json'
 path_percentages = f'games/{appid}/unlockrates.json'
 path_inc_only_n = f'games/{appid}/increment_only.txt'
 path_inc_only = f'{save_dir}/{appid}_inc_only.json'
+path_sets = f'{save_dir}/{appid}_sets.json'
 
 url_random = randint(0, 10000000)
 
@@ -227,6 +228,43 @@ for s in stats:
     if stats[s].inc_only and s in inc_only:
         stats[s].value = max(stats[s].value, inc_only[s])    
 
+groups = {}
+if os.path.isfile(path_sets):
+    with open(path_sets) as f:
+        sets_save = json.load(f)
+    if 'null' in sets_save:
+        sets_save[None] = sets_save.pop('null')
+if schema_as_config:
+    max_order = -1
+    for groupid in data_from_schema['groups']:
+        group = data_from_schema['groups'][groupid]
+        groups[groupid] = {}
+        groups[groupid]['name'] = group['name']
+        groups[groupid]['custom_name'] = None
+        groups[groupid]['prefix_name'] = groupid != None
+        groups[groupid]['dlcappid'] = group['dlcappid']
+        groups[groupid]['order'] = group['order']
+        groups[groupid]['custom_order'] = group['order']
+        groups[groupid]['display'] = True
+        groups[groupid]['count'] = True
+        if group['order'] != None:
+            max_order = max(max_order, group['order'])
+    for groupid in groups:
+        group = groups[groupid]
+        if group['custom_order'] == None:
+            max_order += 1
+            group['custom_order'] = max_order
+        if groupid in sets_save:
+            groups[groupid].update(sets_save[groupid])
+        if isinstance(group['name'], dict):
+            for l in stg['language']:   
+                if l in group['name']:
+                    group['language'] = l
+                    group['name_l'] = group['name'][l]
+                    break
+        group['achs'] = 0
+        group['unlocks'] = 0
+
 def only_float_for_decimals(v):
     if isinstance(v, str):
         v = float(v)
@@ -235,7 +273,7 @@ def only_float_for_decimals(v):
     return(float(v))
 
 class Achievement():
-    def __init__(self, a, u, s, t, p):
+    def __init__(self, a, u, s, t, p, g):
         self.name = a['name']
         self.display_name = a['displayName']
         self.description = a['description']
@@ -253,6 +291,10 @@ class Achievement():
                 if l in self.description:
                     self.description = self.description[l]
                     break
+
+        self.groupid = None
+        if 'groupid' in a:
+            self.groupid = str(a['groupid'])
 
         self.unlock = False
         self.time = 0.0
@@ -275,7 +317,7 @@ class Achievement():
             ap = a['progress']
             self.progress_f = ap['value']
             self.progress_1 = only_float_for_decimals(ap['max_val'])
-            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and s[ap['value']['operand1']].type in ('int', 'float', 'avgrate_st'):
+            if len(ap['value']) == 2 and ap['value']['operation'] == 'statvalue' and ap['value']['operand1'] in s and s[ap['value']['operand1']].type in ('int', 'float', 'avgrate_st'):
                 self.progress_0 = s[ap['value']['operand1']].to_stat_type(ap['min_val'])
                 self.progress_1 = s[ap['value']['operand1']].to_stat_type(ap['max_val'])
                 self.progress_v = s[ap['value']['operand1']].value
@@ -301,10 +343,13 @@ class Achievement():
 
 achs_obj = []
 unlock_count = 0
+exclude_from_count = 0
 for a in achs:
-    o = Achievement(a, unlocks, stats, timestamps, percentages)
+    o = Achievement(a, unlocks, stats, timestamps, percentages, groups)
     achs_obj.append(o)
-    if o.unlock:
+    if o.groupid in groups and not groups[o.groupid]['count']:
+        exclude_from_count += 1
+    elif o.unlock:
         unlock_count += 1
 
 secrets = stg['secrets']
@@ -325,7 +370,14 @@ stats_only = '-s' in sys.argv
 rarity_sort = '-r' in sys.argv
 unlocks_on_top = '-uot' in sys.argv
 timesort = '-t' in sys.argv
+order_by_set = 'none'
+if '-ssf' in sys.argv:
+    order_by_set = 'first'
+elif '-ssl' in sys.argv:
+    order_by_set = 'last'
 
+if order_by_set == 'first':
+    achs_obj.sort(key=lambda a : groups[a.groupid]['custom_order'] if a.groupid in groups else -1)
 if rarity_sort:
     achs_obj.sort(key=lambda a : a.rarity, reverse=True)
 if unlocks_on_top:
@@ -338,22 +390,30 @@ if timesort:
         unlocked_slice.reverse()
         unlocked_slice.sort(key=lambda a : a.time, reverse=True)
         achs_obj = unlocked_slice + achs_obj[unlock_count:]
+if order_by_set == 'last':
+    achs_obj.sort(key=lambda a : groups[a.groupid]['custom_order'] if a.groupid in groups else -1)
 
 text = appid
 if gamename != appid:
     text += ' - ' + gamename
 text += ' | ' + date.strftime(stg['strftime'])
-text += f'\nUnlocked: {unlock_count}/{len(achs_obj)}'
+text += f'\nUnlocked: {unlock_count}/{len(achs_obj) - exclude_from_count}'
+if exclude_from_count > 0:
+    text += '*'
 if filt == True:
     text += ' (Unlocked only)'
 elif filt == False:
     text += ' (Locked only)'
+if order_by_set == 'first':
+    text += ' [S↓]'
 if rarity_sort:
     text += ' [%↓]'
 if unlocks_on_top:
     text += ' [U↑]'
 if timesort:
     text += ' [T↓]'
+if order_by_set == 'last':
+    text += ' [S↓]'
 
 if stats_only and len(stats) > 0:
     text += '\n'
@@ -362,6 +422,7 @@ if stats_only and len(stats) > 0:
 
 secrets_hidden = 0
 secrets_list = []
+hidden_by_set = 0
 for a in achs_obj:
     if stats_only:
         break
@@ -371,16 +432,26 @@ for a in achs_obj:
     if secrets == 'hide' and a.hidden and not a.unlock:
         secrets_hidden += 1
         continue
-    elif secrets == 'bottom' and a.hidden and not a.unlock:
+    if secrets == 'bottom' and a.hidden and not a.unlock:
         secrets_list.append(a)
+        continue
+    if a.groupid in groups and not groups[a.groupid]['display']:
+        if groups[a.groupid]['count']:
+            hidden_by_set += 1
         continue
 
     can_show_desc = not a.hidden or (a.unlock and not hide_descs)
 
+    text += '\n\n'
+    if a.groupid in groups and groups[a.groupid]['prefix_name']:
+        prefix = groups[a.groupid]['name_l']
+        if groups[a.groupid]['custom_name'] != None:
+            prefix = groups[a.groupid]['custom_name']
+        text += '[' + prefix + '] '
     if secrets_listhide and not can_show_desc:
-        text += '\n\n' + stg['hidden_title']
+        text += stg['hidden_title']
     else:
-        text += '\n\n' + a.display_name
+        text += a.display_name
 
     if can_show_desc:
         if a.has_desc:
@@ -407,7 +478,13 @@ if secrets == 'bottom' and len(secrets_list) > 0 and filt != True:
         if secrets_listhide:
             text += '\n\n' + stg['hidden_title']
         else:
-            text += '\n\n' + a.display_name
+            if a.groupid in groups and groups[a.groupid]['prefix_name']:
+                prefix = groups[a.groupid]['name_l']
+                if groups[a.groupid]['custom_name'] != None:
+                    prefix = groups[a.groupid]['custom_name']
+                text += '\n\n[' + prefix + '] ' + a.display_name
+            else:
+                text += '\n\n' + a.display_name
         if len(stg['hidden_desc']) > 0:
             text += '\n' + stg['hidden_desc']
         text += '\n[Locked]'
@@ -416,6 +493,11 @@ elif secrets == 'hide' and secrets_hidden > 0 and filt != True:
         text += '\n\nThere is 1 more hidden achievement'
     else:
         text += f'\n\nThere are {secrets_hidden} more hidden achievements'
+if hidden_by_set > 0:
+    if hidden_by_set == 1:
+        text += '\n\nThere is 1 more achievement from a set that was hidden'
+    else:
+        text += f'\n\nThere are {hidden_by_set} more achievements from sets that were hidden'
 
 if not os.path.isdir('ach_dumper'):
     os.makedirs('ach_dumper')

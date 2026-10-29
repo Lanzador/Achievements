@@ -19,7 +19,7 @@ class Stat:
             self.type = 'avgrate_st'
 
         self.dname = self.name
-        if self.name in stat_dnames and stat_dnames[self.name] != '':
+        if self.name in stat_dnames and not stat_dnames[self.name] in ('', None):
             self.dname = stat_dnames[self.name]
 
     def set_val(self, new):
