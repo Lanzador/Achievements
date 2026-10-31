@@ -1206,6 +1206,27 @@ def adp_get_profile(ach):
         result['color_text_hover'] = None
         result['color_achbg_hover'] = None
 
+    if result['bar_length'] == 0:
+        result['bar_length'] = -10
+    if result['frame_size'] > 5:
+        result['frame_size'] = 5
+    if result['achbg_frame_height'] != None and result['achbg_frame_height'] > 5:
+        result['achbg_frame_height'] = 5
+    if result['frame_color_rare'] == None:
+        result['frame_color_rare'] = result['frame_color_unlock']
+    if result['frame_color_rare_lock'] == None:
+        result['frame_color_rare_lock'] = result['frame_color_lock']
+    if result['color_achbg_rare'] == None:
+        result['color_achbg_rare'] = result['color_achbg_unlock']
+    if result['color_achbg_rare_lock'] == None:
+        result['color_achbg_rare_lock'] = result['color_achbg_lock']
+    if result['color_text_rare'] == None:
+        result['color_text_rare'] = result['color_text_unlock']
+    if result['color_text_rare_lock'] == None:
+        result['color_text_rare_lock'] = result['color_text_lock']
+    if result['color_bar_complete'] == None:
+        result['color_bar_complete'] = result['color_bar_fill']
+
     return result
 
 def adp_generate_positions_dict(urates):
@@ -2962,9 +2983,10 @@ def load_everything(reload=False, keep_data=False):
                     group['custom_order'] = max_order
                 if groupid in saved_set_options:
                     ach_groups[groupid].update(saved_set_options[groupid])
-                group['language'], group['name_l'] = Achievement.pick_language(group['name'], stg)
-                group['achs'] = 0
-                group['unlocks'] = 0
+    for group in ach_groups.values():
+        group['language'], group['name_l'] = Achievement.pick_language(group['name'], stg)
+        group['achs'] = 0
+        group['unlocks'] = 0
     ordered_groups = sorted(list(ach_groups), key=lambda g : ach_groups[g]['custom_order'])
 
     global achs_json
@@ -4133,7 +4155,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.8.0e1')
+                    print(' - Version: v1.8.0e2')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):

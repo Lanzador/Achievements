@@ -1,3 +1,8 @@
+## v1.8.0e2
+- Fix `Ctrl+Shift+R` breaking set progress counters and not updating language for set names
+- Apply checks done for `settings.txt` to settings from display profiles (disallow `frame_size` > 5, fix `bar_length=0` having extra empty space, set `_rare` (and `_rare_lock`) options without a value to values from `_unlock` (and `_lock`) options) 
+- Add `groupid` to `Achievement.to_json()`
+
 ## v1.8.0e1
 - Achievement display profiles and related settings
 - ADP-related `edit()` values

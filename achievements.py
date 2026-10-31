@@ -131,6 +131,8 @@ class Achievement:
             j['progress']['min_val'] = str(self.progress.min_val)
             j['progress']['max_val'] = str(self.progress.max_val)
             j['progress']['value'] = self.progress.value
+        if self.groupid != None:
+            j['groupid'] = self.groupid
         return j
 
 class AchievementProgress:
