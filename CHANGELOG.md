@@ -1,3 +1,8 @@
+## v1.8.1
+- Fix crash when loading a game with achievement sets and set options aren't yet saved for that game
+- Fix crash when opening achievement sets screen because of experimental comparison code leftovers in regular version
+- Fix achievement sets button being clickable when it's hidden because the game has no sets
+
 ## v1.8.0
 - Support for achievement sets. Only available when using UserGameStatsSchema as game config
 - Copy UserGameStatsSchema when generating configs (other files are still copied even though schemas have priority over `achievements.json`)

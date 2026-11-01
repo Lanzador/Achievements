@@ -687,24 +687,6 @@ def draw_sets():
         else:
             set_progress_str += ' (0%)'
 
-        if len(cmp_data) > 0 and group['achs'] > 0 and cmp_stg['unlock_lb']:
-            set_progress_str += cmp_set_unlock_lb_short(groupid)
-            ucounts = [cmp_data[x]['group_unlocks'].get(groupid, 0) for x in cmp_data]
-            best = max(ucounts)
-            if best > group['unlocks']:
-                closest = 0
-                ucounts.sort()
-                for i in ucounts:
-                    closest = i
-                    if i > group['unlocks']: break
-                draw_start = (group['unlocks'] * stg['gamebar_length'] // group['achs'])
-                closest_px = (closest * stg['gamebar_length'] // group['achs']) - draw_start
-                best_px = (best * stg['gamebar_length'] // group['achs']) - draw_start
-                if stg['exp_cmp_color_bar_best'] != None:
-                    pygame.draw.rect(screen, stg['exp_cmp_color_bar_best'], pygame.Rect(10 + draw_start, y_bar, best_px, 13))
-                if stg['exp_cmp_color_bar_next'] != None:
-                    pygame.draw.rect(screen, stg['exp_cmp_color_bar_next'], pygame.Rect(10 + draw_start, y_bar, closest_px, 13))
-
         show_text(screen, font_general, set_progress_str, (stg['gamebar_length'] + 20, y_ptext), text_color)
 
         if not renaming_set:
@@ -1250,6 +1232,7 @@ if schema_as_config:
         data_from_schema = process_schema(appid, vdf.binary_loads(f.read()))
 
 ach_groups = {}
+saved_set_options = {}
 if os.path.isfile(f'{save_dir}/{appid}_sets.json'):
     with open(f'{save_dir}/{appid}_sets.json') as f:
         saved_set_options = json.load(f)
@@ -2295,7 +2278,7 @@ while running:
                 elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                     xnote = ' (' + save_dir.split('_')[-1] + ')'
                 print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                print(' - Version: v1.8.0')
+                print(' - Version: v1.8.1')
 
         elif event.type == pygame.MOUSEMOTION:
             if viewing in ('achs', 'history', 'history_unlocks'):
@@ -2429,7 +2412,7 @@ while running:
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'sort'
                 else:
-                    if btn_locs['sets'][state_filter].collidepoint(event.pos):
+                    if btn_locs['sets'][state_filter].collidepoint(event.pos) and len(ach_groups) > 0:
                         viewing = 'sets'
                     elif btn_locs['filter'][state_filter].collidepoint(event.pos):
                         state_filter += 1
@@ -2729,12 +2712,6 @@ while running:
                                     print(f" - Effective order: {group['custom_order']}")
                                 if group['custom_name'] != None:
                                     print(f" - Prefix: {group['custom_name']}")
-                                if len(cmp_data) > 0:
-                                    lb = cmp_set_unlock_lb(groupid)
-                                    if len(lb) > 0:
-                                        print(' - Comparison')
-                                    for x in lb:
-                                        print(f' - - {x[0]} : {x[1]}')
                             except Exception as ex:
                                 print(f'Error when printing set info: {type(ex).__name__}')
             if viewing in ('achs', 'history', 'history_unlocks') and hover_ach != None:
