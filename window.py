@@ -2956,6 +2956,7 @@ def load_everything(reload=False, keep_data=False):
 
     if not keep_data:
         ach_groups = {}
+        saved_set_options = {}
         if os.path.isfile(f'{save_dir}/{appid}_sets.json'):
             with open(f'{save_dir}/{appid}_sets.json') as f:
                 saved_set_options = json.load(f)
@@ -4155,7 +4156,7 @@ while running:
                     elif (isinstance(source_extra, str) and source_extra[:5] == 'path:'):
                         xnote = ' (' + save_dir.split('_')[-1] + ')'
                     print(f'\n - Tracking: {appid} / {achdata_source} / {source_extra}{xnote}')
-                    print(' - Version: v1.8.0e2')
+                    print(' - Version: v1.8.1e1')
             elif event.key == pygame.K_e:
                 keys = pygame.key.get_pressed()
                 if 1 in (keys[pygame.K_LCTRL], keys[pygame.K_RCTRL]):
@@ -4560,7 +4561,7 @@ while running:
                     elif pygame.Rect(stg['window_size_x'] - 32, 10, 22, 22).collidepoint(event.pos):
                         header_extra = 'sort'
                 else:
-                    if btn_locs['sets'][state_filter].collidepoint(event.pos):
+                    if btn_locs['sets'][state_filter].collidepoint(event.pos) and len(ach_groups) > 0:
                         viewing = 'sets'
                     elif btn_locs['filter'][state_filter].collidepoint(event.pos):
                         state_filter += 1
